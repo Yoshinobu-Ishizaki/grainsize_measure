@@ -8,11 +8,11 @@
 
 ## User Interface
 
-
 - `uv run src/grainsize_measure.py`で起動する。
 - 画像の外周境界線にまたがった粒子は除外するかどうかはオプションとして計算設定画面で選択できるようにする。
 - 確認のため、結晶粒番号をマップした画像ファイルも元ファイルとは名称変更して保存できるようにする。
-- 境界判定のためにプロセスされた画像とオリジナルの画像を見比べるために、どちらを表示するかを選ぶトグルスイッチを画面横に設ける。
+- 境界判定のためにプロセスされた画像とオリジナルの画像を見比べるために、どちらを表示するかを選べるようにする。
+- Overlay colored line onto auto detected scale bar so that user can see its auto detection is actually correct.
 
 ## Development notes
 
@@ -21,5 +21,10 @@
 - pythonスクリプトは `src` フォルダに保存される。
 - テストコードは `tests` フォルダに保存する。
 - テスト用のサンプルデータは `tests/sample` フォルダに保存される。
+- Use some GSAT sample data to verify implementation. Absolutely same result must be achieved as GSAT original.
 - GUIには PyQT6 を使用する。
-- 
+
+## Documentation
+
+- Clearly acknowledge NIST's GSAT source code in README.md .
+- This project is in MIT License.
