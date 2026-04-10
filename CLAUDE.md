@@ -1,7 +1,7 @@
 ## Core concepts
 
 - grainsize_measure は 与えた結晶粒観察画像(寸法マーカー入)を画像分析して、結晶粒子境界を認識し、各粒子面積を計算し、その分布を表としてCSVで出力するpython GUI プログラムである。
-- Consider to use https://github.com/usnistgov/grain-size-analysis-tools as a first method.
+- Consider to use https://github.com/usnistgov/grain-size-analysis-tools as a first method. It was cloned into ../grain-size-analysis-tools/  
 - Also you can consider to use Flood-fill to find grain boundary. It should be implemented in OpenCV2 library or scikit-image.
 - 寸法マーカーから px/mm スケールを自動判別する。
 - 結果は結晶粒の番号と面積、等価な面積を持つ円の直径を並べたCSVファイルとする。
