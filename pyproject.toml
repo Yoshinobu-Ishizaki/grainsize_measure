@@ -1,7 +1,20 @@
 [project]
 name = "grainsize-measure"
 version = "0.1.0"
-description = "Add your description here"
+description = "SEM crystal grain size measurement GUI application"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "PyQt6>=6.7",
+    "matplotlib>=3.9",
+    "opencv-python>=4.10",
+    "scikit-image>=0.24",
+    "scipy>=1.14",
+    "numpy>=2.1",
+    "polars>=1.9",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
