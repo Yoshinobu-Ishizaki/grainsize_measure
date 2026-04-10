@@ -151,8 +151,13 @@ class MainWindow(QMainWindow):
         self._worker.finished.connect(self._thread.quit)
         self._worker.error.connect(self._thread.quit)
         self._thread.finished.connect(self._thread.deleteLater)
+        self._thread.finished.connect(self._on_thread_finished)
 
         self._thread.start()
+
+    def _on_thread_finished(self) -> None:
+        self._thread = None
+        self._worker = None
 
     def _on_analysis_done(self, df, overlay: np.ndarray) -> None:
         self._canvas_overlay.show_image(overlay, title="粒子 Overlay")
