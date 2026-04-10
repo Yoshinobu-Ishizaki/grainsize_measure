@@ -57,7 +57,7 @@ class AnalysisParams:
 class GrainAnalyzer:
     def __init__(self) -> None:
         self.image_path: Path | None = None
-        self.original_image: np.ndarray | None = None   # BGR, uint8
+        self.original_image: np.ndarray | None = None   # BGR (3-channel), uint8
         self.gray_image: np.ndarray | None = None       # Grayscale, uint8
         self.binary_image: np.ndarray | None = None     # Binary, uint8 (255=boundary, 0=interior)
         self.labeled_grains: np.ndarray | None = None   # int32 label map
@@ -68,12 +68,17 @@ class GrainAnalyzer:
     def load_image(self, path: str | Path) -> None:
         """Load image and convert to grayscale."""
         self.image_path = Path(path)
-        self.original_image = cv2.imread(str(self.image_path))
+        self.original_image = cv2.imread(str(self.image_path), cv2.IMREAD_UNCHANGED)
         if self.original_image is None:
             raise ValueError(f"Could not load image from {self.image_path}")
 
-        if len(self.original_image.shape) == 3:
-            self.gray_image = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
+        if self.original_image.ndim == 3:
+            n_channels = self.original_image.shape[2]
+            if n_channels == 4:
+                self.gray_image = cv2.cvtColor(self.original_image, cv2.COLOR_BGRA2GRAY)
+                self.original_image = cv2.cvtColor(self.original_image, cv2.COLOR_BGRA2BGR)
+            else:
+                self.gray_image = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
         else:
             self.gray_image = self.original_image.copy()
 

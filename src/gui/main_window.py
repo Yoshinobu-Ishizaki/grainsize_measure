@@ -109,8 +109,10 @@ class MainWindow(QMainWindow):
         # 中央パネル（タブ）
         self._tabs = QTabWidget()
         self._canvas_original = ImageCanvas()
+        self._canvas_gray = ImageCanvas()
         self._canvas_overlay = ImageCanvas()
         self._tabs.addTab(self._canvas_original, "元画像")
+        self._tabs.addTab(self._canvas_gray, "グレースケール")
         self._tabs.addTab(self._canvas_overlay, "粒子 Overlay")
         main_layout.addWidget(self._tabs, stretch=1)
 
@@ -152,6 +154,8 @@ class MainWindow(QMainWindow):
 
         original_rgb = cv2.cvtColor(self._analyzer.original_image, cv2.COLOR_BGR2RGB)
         self._canvas_original.show_image(original_rgb, title=Path(path).name)
+        gray_rgb = cv2.cvtColor(self._analyzer.gray_image, cv2.COLOR_GRAY2RGB)
+        self._canvas_gray.show_image(gray_rgb, title=f"{Path(path).name} (グレースケール)")
         self._canvas_overlay.clear()
         self._results.reset()
         self._settings.set_run_enabled(True)
@@ -193,7 +197,7 @@ class MainWindow(QMainWindow):
 
     def _on_analysis_done(self, chord_df, grain_df, overlay: np.ndarray) -> None:
         self._canvas_overlay.show_image(overlay, title="粒子 Overlay")
-        self._tabs.setCurrentIndex(1)
+        self._tabs.setCurrentIndex(2)
 
         ppu = self._settings.get_params().pixels_per_um
         chord_stats = self._analyzer.get_chord_statistics()
@@ -324,6 +328,8 @@ class MainWindow(QMainWindow):
                 self._analyzer.load_image(image_path)
                 original_rgb = cv2.cvtColor(self._analyzer.original_image, cv2.COLOR_BGR2RGB)
                 self._canvas_original.show_image(original_rgb, title=Path(image_path).name)
+                gray_rgb = cv2.cvtColor(self._analyzer.gray_image, cv2.COLOR_GRAY2RGB)
+                self._canvas_gray.show_image(gray_rgb, title=f"{Path(image_path).name} (グレースケール)")
                 self._canvas_overlay.clear()
                 self._results.reset()
                 self._settings.set_run_enabled(True)
