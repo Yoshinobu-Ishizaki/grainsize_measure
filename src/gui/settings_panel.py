@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QLabel,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -28,6 +29,7 @@ class SettingsPanel(QWidget):
 
     open_requested = pyqtSignal()
     run_requested = pyqtSignal()
+    auto_detect_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -56,13 +58,30 @@ class SettingsPanel(QWidget):
         # --- スケール設定 ---
         grp_scale = QGroupBox("スケール")
         form_scale = QFormLayout(grp_scale)
+
         self.spin_pixels_per_um = QDoubleSpinBox()
         self.spin_pixels_per_um.setRange(0.01, 100000.0)
         self.spin_pixels_per_um.setDecimals(3)
         self.spin_pixels_per_um.setValue(1.0)
         self.spin_pixels_per_um.setSpecialValueText("(未設定)")
         self.spin_pixels_per_um.setMinimum(0.0)  # 0 = 未設定
-        form_scale.addRow("px/µm:", self.spin_pixels_per_um)
+
+        self.btn_auto_detect = QPushButton("自動検出")
+        self.btn_auto_detect.setFixedWidth(70)
+        self.btn_auto_detect.setEnabled(False)
+        self.btn_auto_detect.clicked.connect(self.auto_detect_requested)
+
+        scale_row = QHBoxLayout()
+        scale_row.addWidget(self.spin_pixels_per_um, stretch=1)
+        scale_row.addWidget(self.btn_auto_detect)
+        form_scale.addRow("px/µm:", scale_row)
+
+        self.lbl_scale_status = QLabel()
+        self.lbl_scale_status.setWordWrap(True)
+        self.lbl_scale_status.setStyleSheet("color: gray; font-size: 10px;")
+        self.lbl_scale_status.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        form_scale.addRow(self.lbl_scale_status)
+
         layout.addWidget(grp_scale)
 
         # --- 前処理 ---
@@ -174,3 +193,13 @@ class SettingsPanel(QWidget):
 
     def set_run_enabled(self, enabled: bool) -> None:
         self.btn_run.setEnabled(enabled)
+
+    def set_auto_detect_enabled(self, enabled: bool) -> None:
+        self.btn_auto_detect.setEnabled(enabled)
+
+    def set_scale_from_detection(self, pixels_per_um: float, status_text: str) -> None:
+        self.spin_pixels_per_um.setValue(pixels_per_um)
+        self.lbl_scale_status.setText(status_text)
+
+    def set_scale_status(self, text: str) -> None:
+        self.lbl_scale_status.setText(text)

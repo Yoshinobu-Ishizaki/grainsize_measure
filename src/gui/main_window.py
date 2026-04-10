@@ -6,13 +6,19 @@ from pathlib import Path
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QStatusBar,
     QTabWidget,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -25,6 +31,23 @@ from gui.results_panel import ResultsPanel
 # ---------------------------------------------------------------------------
 # バックグラウンドワーカー
 # ---------------------------------------------------------------------------
+
+class ScaleDetectionWorker(QObject):
+    finished = pyqtSignal(object)  # ScaleBarResult を emit
+    error = pyqtSignal(str)
+
+    def __init__(self, image_bgr: np.ndarray) -> None:
+        super().__init__()
+        self._image_bgr = image_bgr
+
+    def run(self) -> None:
+        try:
+            from scale_detector import detect_scale_bar  # noqa: PLC0415
+            result = detect_scale_bar(self._image_bgr)
+            self.finished.emit(result)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
 
 class AnalysisWorker(QObject):
     finished = pyqtSignal(object, object)  # (pl.DataFrame, np.ndarray overlay)
@@ -57,6 +80,8 @@ class MainWindow(QMainWindow):
         self._analyzer = GrainAnalyzer()
         self._thread: QThread | None = None
         self._worker: AnalysisWorker | None = None
+        self._scale_thread: QThread | None = None
+        self._scale_worker: ScaleDetectionWorker | None = None
 
         self._build_ui()
         self._build_status_bar()
@@ -76,6 +101,7 @@ class MainWindow(QMainWindow):
         self._settings = SettingsPanel()
         self._settings.open_requested.connect(self._open_image)
         self._settings.run_requested.connect(self._run_analysis)
+        self._settings.auto_detect_requested.connect(self._run_scale_detection)
         main_layout.addWidget(self._settings)
 
         # 中央パネル（タブ）
@@ -126,6 +152,8 @@ class MainWindow(QMainWindow):
         self._canvas_overlay.clear()
         self._results.reset()
         self._settings.set_run_enabled(True)
+        self._settings.set_auto_detect_enabled(True)
+        self._settings.set_scale_status("")
         self._tabs.setCurrentIndex(0)
 
         h, w = self._analyzer.gray_image.shape
@@ -177,6 +205,95 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "解析エラー", message)
         self.statusBar().showMessage("解析中にエラーが発生しました。", 5000)
         self._settings.set_run_enabled(True)
+
+    def _run_scale_detection(self) -> None:
+        if self._scale_thread is not None and self._scale_thread.isRunning():
+            return
+
+        self._settings.set_auto_detect_enabled(False)
+        self._settings.set_scale_status("検出中...")
+        self.statusBar().showMessage("スケールバーを検出中...")
+
+        self._scale_thread = QThread()
+        self._scale_worker = ScaleDetectionWorker(self._analyzer.original_image)
+        self._scale_worker.moveToThread(self._scale_thread)
+
+        self._scale_thread.started.connect(self._scale_worker.run)
+        self._scale_worker.finished.connect(self._on_scale_done)
+        self._scale_worker.error.connect(self._on_scale_error)
+        self._scale_worker.finished.connect(self._scale_thread.quit)
+        self._scale_worker.error.connect(self._scale_thread.quit)
+        self._scale_thread.finished.connect(self._scale_thread.deleteLater)
+        self._scale_thread.finished.connect(self._on_scale_thread_finished)
+
+        self._scale_thread.start()
+
+    def _on_scale_done(self, result) -> None:
+        self._settings.set_auto_detect_enabled(True)
+
+        if result.pixels_per_um is not None:
+            unit_str = result.unit or "µm"
+            status = (
+                f"検出: {result.bar_length_px}px = {result.physical_value}{unit_str}"
+                f" → {result.pixels_per_um:.3f} px/µm"
+            )
+            self._settings.set_scale_from_detection(result.pixels_per_um, status)
+            self.statusBar().showMessage(
+                f"スケール自動検出: {result.pixels_per_um:.3f} px/µm", 5000
+            )
+        else:
+            self._prompt_physical_dimension(result)
+
+    def _on_scale_error(self, message: str) -> None:
+        self._settings.set_auto_detect_enabled(True)
+        self._settings.set_scale_status(f"検出失敗: {message}")
+        self.statusBar().showMessage("スケールバーの検出に失敗しました。", 5000)
+
+    def _on_scale_thread_finished(self) -> None:
+        self._scale_thread = None
+        self._scale_worker = None
+
+    def _prompt_physical_dimension(self, result) -> None:
+        """OCR失敗時に実寸値をユーザーから入力させるダイアログ。"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("実寸入力")
+
+        form = QFormLayout()
+        spin_value = QDoubleSpinBox()
+        spin_value.setRange(0.001, 100000.0)
+        spin_value.setDecimals(3)
+        spin_value.setValue(50.0)
+
+        combo_unit = QComboBox()
+        combo_unit.addItems(["µm", "nm", "mm"])
+
+        form.addRow(f"バー長: {result.bar_length_px} px  実寸値:", spin_value)
+        form.addRow("単位:", combo_unit)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+
+        vbox = QVBoxLayout(dialog)
+        vbox.addLayout(form)
+        vbox.addWidget(buttons)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            from scale_detector import compute_pixels_per_um_from_bar  # noqa: PLC0415
+            unit = combo_unit.currentText()
+            ppu = compute_pixels_per_um_from_bar(
+                result.bar_length_px, spin_value.value(), unit
+            )
+            status = (
+                f"設定: {result.bar_length_px}px = {spin_value.value()}{unit}"
+                f" → {ppu:.3f} px/µm"
+            )
+            self._settings.set_scale_from_detection(ppu, status)
+            self.statusBar().showMessage(f"スケール設定: {ppu:.3f} px/µm", 5000)
+        else:
+            self._settings.set_scale_status("キャンセルされました")
 
     def _export_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(

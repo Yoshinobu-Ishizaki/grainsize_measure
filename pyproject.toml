@@ -1,6 +1,6 @@
 [project]
 name = "grainsize-measure"
-version = "0.1.0"
+version = "0.2.0"
 description = "SEM crystal grain size measurement GUI application"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -12,6 +12,12 @@ dependencies = [
     "scipy>=1.14",
     "numpy>=2.1",
     "polars>=1.9",
+    "easyocr>=1.7.2",
+]
+
+[project.optional-dependencies]
+ocr = [
+    "easyocr>=1.7",
 ]
 
 [dependency-groups]
