@@ -31,6 +31,8 @@ class SettingsPanel(QWidget):
     open_requested = pyqtSignal()
     run_requested = pyqtSignal()
     auto_detect_requested = pyqtSignal()
+    load_params_requested = pyqtSignal()
+    save_params_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -54,6 +56,17 @@ class SettingsPanel(QWidget):
         self.btn_open = QPushButton("画像を開く...")
         self.btn_open.clicked.connect(self.open_requested)
         layout.addWidget(self.btn_open)
+
+        # --- パラメータ読込 / 保存 ---
+        btn_params_row = QHBoxLayout()
+        self.btn_load_params = QPushButton("パラメータ読込")
+        self.btn_save_params = QPushButton("パラメータ保存")
+        self.btn_save_params.setEnabled(False)
+        self.btn_load_params.clicked.connect(self.load_params_requested)
+        self.btn_save_params.clicked.connect(self.save_params_requested)
+        btn_params_row.addWidget(self.btn_load_params)
+        btn_params_row.addWidget(self.btn_save_params)
+        layout.addLayout(btn_params_row)
 
         # --- スケール設定 ---
         grp_scale = QGroupBox("スケール")
@@ -89,8 +102,9 @@ class SettingsPanel(QWidget):
         form_seg = QFormLayout(grp_seg)
 
         self.spin_denoise_h = QDoubleSpinBox()
-        self.spin_denoise_h.setRange(0.1, 100.0)
-        self.spin_denoise_h.setSingleStep(1.0)
+        self.spin_denoise_h.setRange(0.01, 100.0)
+        self.spin_denoise_h.setDecimals(3)
+        self.spin_denoise_h.setSingleStep(0.01)
         self.spin_denoise_h.setValue(10.0)
         form_seg.addRow("ノイズ除去 h:", self.spin_denoise_h)
 
@@ -105,14 +119,24 @@ class SettingsPanel(QWidget):
         self.spin_sharpen_amount.setValue(1.2)
         form_seg.addRow("鮮鋭化強度:", self.spin_sharpen_amount)
 
+        self.chk_invert = QCheckBox("グレースケール反転 (暗い境界線)")
+        self.chk_invert.setChecked(False)
+        form_seg.addRow(self.chk_invert)
+
         self.combo_threshold = QComboBox()
-        self.combo_threshold.addItems(["グローバル閾値", "適応的閾値"])
+        self.combo_threshold.addItems(["グローバル閾値", "適応的閾値", "ヒステリシス閾値"])
         form_seg.addRow("閾値方法:", self.combo_threshold)
 
         self.spin_threshold_value = QSpinBox()
         self.spin_threshold_value.setRange(0, 255)
         self.spin_threshold_value.setValue(128)
-        form_seg.addRow("閾値:", self.spin_threshold_value)
+        form_seg.addRow("閾値 (低):", self.spin_threshold_value)
+
+        self.spin_threshold_high = QSpinBox()
+        self.spin_threshold_high.setRange(0, 255)
+        self.spin_threshold_high.setValue(200)
+        self.spin_threshold_high.setEnabled(False)
+        form_seg.addRow("閾値 (高):", self.spin_threshold_high)
 
         self.combo_threshold.currentIndexChanged.connect(self._on_threshold_method_changed)
 
@@ -125,12 +149,12 @@ class SettingsPanel(QWidget):
 
         self.spin_morph_close = QSpinBox()
         self.spin_morph_close.setRange(0, 20)
-        self.spin_morph_close.setValue(3)
+        self.spin_morph_close.setValue(1)
         form_seg.addRow("クロージング半径:", self.spin_morph_close)
 
         self.spin_morph_open = QSpinBox()
         self.spin_morph_open.setRange(0, 20)
-        self.spin_morph_open.setValue(2)
+        self.spin_morph_open.setValue(0)
         form_seg.addRow("オープニング半径:", self.spin_morph_open)
 
         self.spin_min_feature = QSpinBox()
@@ -204,9 +228,12 @@ class SettingsPanel(QWidget):
     # ------------------------------------------------------------------
 
     def _on_threshold_method_changed(self, index: int) -> None:
-        is_global = index == 0
-        self.spin_threshold_value.setEnabled(is_global)
-        self.spin_adaptive_block.setEnabled(not is_global)
+        is_global = index == 0       # グローバル閾値
+        is_hysteresis = index == 2   # ヒステリシス閾値
+        is_adaptive = index == 1     # 適応的閾値
+        self.spin_threshold_value.setEnabled(is_global or is_hysteresis)
+        self.spin_threshold_high.setEnabled(is_hysteresis)
+        self.spin_adaptive_block.setEnabled(is_adaptive)
 
     # ------------------------------------------------------------------
     # Public API
@@ -217,12 +244,11 @@ class SettingsPanel(QWidget):
         ppu_value = self.spin_pixels_per_um.value()
         pixels_per_um = ppu_value if ppu_value > 0.0 else None
 
-        threshold_method = (
-            "global_threshold" if self.combo_threshold.currentIndex() == 0
-            else "adaptive_threshold"
-        )
+        method_map = {0: "global_threshold", 1: "adaptive_threshold", 2: "hysteresis_threshold"}
+        threshold_method = method_map[self.combo_threshold.currentIndex()]
 
         return AnalysisParams(
+            invert_grayscale=self.chk_invert.isChecked(),
             denoise_h=self.spin_denoise_h.value(),
             denoise_patch=7,
             denoise_search=21,
@@ -230,6 +256,7 @@ class SettingsPanel(QWidget):
             sharpen_amount=self.spin_sharpen_amount.value(),
             threshold_method=threshold_method,
             threshold_value=self.spin_threshold_value.value(),
+            threshold_high=self.spin_threshold_high.value(),
             adaptive_block_size=self.spin_adaptive_block.value(),
             adaptive_offset=0.0,
             morph_close_radius=self.spin_morph_close.value(),
@@ -237,14 +264,61 @@ class SettingsPanel(QWidget):
             min_feature_size=self.spin_min_feature.value(),
             max_hole_size=10,
             line_spacing=self.spin_line_spacing.value(),
+            row_scan_start=0,
             theta_start=self.spin_theta_start.value(),
             theta_end=self.spin_theta_end.value(),
             n_theta_steps=self.spin_n_theta.value(),
+            reskeletonize=False,
+            pad_for_rotation=False,
             min_grain_area=self.spin_min_grain_area.value(),
             exclude_edge_grains=self.chk_exclude_edge.isChecked(),
             edge_buffer=self.spin_edge_buffer.value(),
             pixels_per_um=pixels_per_um,
         )
+
+    def set_params(self, data: dict) -> str | None:
+        """Populate all UI widgets from a parameter dict (e.g. loaded from JSON).
+
+        Returns the image_path value from the dict (or None) so the caller can
+        load the corresponding image.
+        """
+        _method_map = {
+            "global_threshold": 0,
+            "adaptive_threshold": 1,
+            "hysteresis_threshold": 2,
+        }
+
+        ppu = data.get("pixels_per_um")
+        self.spin_pixels_per_um.setValue(ppu if ppu is not None else 0.0)
+
+        self.chk_invert.setChecked(bool(data.get("invert_grayscale", False)))
+        self.spin_denoise_h.setValue(float(data.get("denoise_h", 10.0)))
+        self.spin_sharpen_radius.setValue(int(data.get("sharpen_radius", 3)))
+        self.spin_sharpen_amount.setValue(float(data.get("sharpen_amount", 1.2)))
+
+        method = data.get("threshold_method", "global_threshold")
+        self.combo_threshold.setCurrentIndex(_method_map.get(method, 0))
+        self.spin_threshold_value.setValue(int(data.get("threshold_value", 128)))
+        self.spin_threshold_high.setValue(int(data.get("threshold_high", 200)))
+        self.spin_adaptive_block.setValue(int(data.get("adaptive_block_size", 35)))
+
+        self.spin_morph_close.setValue(int(data.get("morph_close_radius", 1)))
+        self.spin_morph_open.setValue(int(data.get("morph_open_radius", 0)))
+        self.spin_min_feature.setValue(int(data.get("min_feature_size", 50)))
+
+        self.spin_line_spacing.setValue(int(data.get("line_spacing", 20)))
+        self.spin_theta_start.setValue(float(data.get("theta_start", 0.0)))
+        self.spin_theta_end.setValue(float(data.get("theta_end", 135.0)))
+        self.spin_n_theta.setValue(int(data.get("n_theta_steps", 4)))
+
+        self.spin_min_grain_area.setValue(int(data.get("min_grain_area", 50)))
+        self.chk_exclude_edge.setChecked(bool(data.get("exclude_edge_grains", True)))
+        self.spin_edge_buffer.setValue(int(data.get("edge_buffer", 5)))
+
+        return data.get("image_path")
+
+    def set_save_enabled(self, enabled: bool) -> None:
+        self.btn_save_params.setEnabled(enabled)
 
     def set_run_enabled(self, enabled: bool) -> None:
         self.btn_run.setEnabled(enabled)

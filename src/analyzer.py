@@ -25,8 +25,10 @@ class AnalysisParams:
     denoise_search: int = 21
     sharpen_radius: int = 3
     sharpen_amount: float = 1.2
-    threshold_method: Literal["global_threshold", "adaptive_threshold"] = "global_threshold"
+    invert_grayscale: bool = False   # invert before segmentation (for dark-boundary images)
+    threshold_method: Literal["global_threshold", "adaptive_threshold", "hysteresis_threshold"] = "global_threshold"
     threshold_value: int = 128
+    threshold_high: int = 200        # upper threshold for hysteresis method
     adaptive_block_size: int = 35
     adaptive_offset: float = 0.0
     morph_close_radius: int = 3
@@ -36,9 +38,12 @@ class AnalysisParams:
 
     # --- Intercept measurement (Track A) ---
     line_spacing: int = 20       # pixels between parallel lines
+    row_scan_start: int = 0      # first row to scan (0 = GSAT-compatible)
     theta_start: float = 0.0     # degrees
     theta_end: float = 135.0     # degrees
     n_theta_steps: int = 4
+    reskeletonize: bool = False  # re-skeletonize after each rotation (GSAT-compatible)
+    pad_for_rotation: bool = False  # pad image before rotation to avoid clipping
 
     # --- Per-grain area measurement (Track B) ---
     min_grain_area: int = 50
@@ -85,6 +90,10 @@ class GrainAnalyzer:
         p = self.params
         img = self.gray_image.copy()
 
+        # 0. Optionally invert (for optical images where boundaries are dark)
+        if p.invert_grayscale:
+            img = 255 - img
+
         # 1. Denoise
         img = sdrv.apply_driver_denoise(
             img, ["nl_means", p.denoise_h, p.denoise_patch, p.denoise_search], quiet_in=True
@@ -100,18 +109,22 @@ class GrainAnalyzer:
             img = sdrv.apply_driver_thresholding(
                 img, ["global_threshold", p.threshold_value], quiet_in=True
             )
+        elif p.threshold_method == "hysteresis_threshold":
+            img = sdrv.apply_driver_thresholding(
+                img, ["hysteresis_threshold", p.threshold_value, p.threshold_high], quiet_in=True
+            )
         else:
             img = sdrv.apply_driver_thresholding(
                 img, ["adaptive_threshold", p.adaptive_block_size, p.adaptive_offset], quiet_in=True
             )
 
-        # 4. Morphological closing (fill gaps in boundaries)
-        # apply_driver_morph: [op_type, footprint_type, radius]
-        #   op_type: 0=closing, 1=opening; footprint_type: 1=disk
-        img = sdrv.apply_driver_morph(img, [0, 1, p.morph_close_radius], quiet_in=True)
+        # 4. Morphological closing (fill gaps in boundaries); skipped when radius=0
+        if p.morph_close_radius > 0:
+            img = sdrv.apply_driver_morph(img, [0, 1, p.morph_close_radius], quiet_in=True)
 
-        # 5. Morphological opening (remove isolated noise)
-        img = sdrv.apply_driver_morph(img, [1, 1, p.morph_open_radius], quiet_in=True)
+        # 5. Morphological opening (remove isolated noise); skipped when radius=0
+        if p.morph_open_radius > 0:
+            img = sdrv.apply_driver_morph(img, [1, 1, p.morph_open_radius], quiet_in=True)
 
         # 6. Remove small features / fill small holes
         # apply_driver_del_features: ["scikit", max_hole_sz, min_feat_sz]
@@ -136,19 +149,34 @@ class GrainAnalyzer:
         else:
             thetas = np.linspace(p.theta_start, p.theta_end, p.n_theta_steps)
 
+        # Optionally pad to avoid clipping during rotation (GSAT-compatible)
+        if p.pad_for_rotation:
+            circle_min_diameter = int(np.ceil(np.sqrt(height ** 2 + width ** 2)))
+            n_pad = int(np.ceil(1.1 * (circle_min_diameter - min(height, width)) * 0.5))
+            work_img = np.pad(self.binary_image, n_pad, constant_values=0)
+        else:
+            work_img = self.binary_image
+
         for theta in thetas:
             # Rotate image so we can scan horizontal lines
             if abs(theta) < 0.1:
-                rotated = self.binary_image
+                rotated = work_img
             else:
                 rotated = ski_rotate(
-                    self.binary_image, theta, preserve_range=True, order=0
+                    work_img, theta, preserve_range=True, order=1
                 ).astype(np.uint8)
+                rotated[rotated >= 128] = 255
+                rotated[rotated < 128] = 0
+
+                if p.reskeletonize:
+                    from skimage.morphology import skeletonize
+                    from skimage.util import img_as_bool, img_as_ubyte
+                    rotated = sdrv.apply_driver_morph(rotated, [2, 1, 1], quiet_in=True)
+                    rotated = img_as_ubyte(skeletonize(img_as_bool(rotated)))
 
             rot_h, rot_w = rotated.shape
-            start_row = p.line_spacing // 2
 
-            for row_idx in range(start_row, rot_h, p.line_spacing):
+            for row_idx in range(p.row_scan_start, rot_h, p.line_spacing):
                 pixel_arr = rotated[row_idx, :]
                 segments = gsz.find_intersections(pixel_arr)
                 if len(segments) == 0:
@@ -266,12 +294,15 @@ class GrainAnalyzer:
             return {}
 
         lengths = self.chord_df["length_pixels"]
+        def _f(v) -> float | None:
+            return float(v) if v is not None else None
+
         stats: dict = {
             "count": len(lengths),
-            "mean_px": float(lengths.mean()),
-            "std_px": float(lengths.std()),
-            "min_px": float(lengths.min()),
-            "max_px": float(lengths.max()),
+            "mean_px": _f(lengths.mean()),
+            "std_px": _f(lengths.std()),
+            "min_px": _f(lengths.min()),
+            "max_px": _f(lengths.max()),
             "mean_um": None,
             "astm_grain_size_g": None,
         }
@@ -296,12 +327,16 @@ class GrainAnalyzer:
 
         areas = self.grain_df["area_pixels"]
         diams = self.grain_df["equivalent_diameter_pixels"]
+
+        def _f(v) -> float | None:
+            return float(v) if v is not None else None
+
         return {
             "count": len(areas),
-            "mean_area_px": float(areas.mean()),
-            "std_area_px": float(areas.std()),
-            "mean_diam_px": float(diams.mean()),
-            "std_diam_px": float(diams.std()),
+            "mean_area_px": _f(areas.mean()),
+            "std_area_px": _f(areas.std()),
+            "mean_diam_px": _f(diams.mean()),
+            "std_diam_px": _f(diams.std()),
         }
 
     def render_overlay_image(self) -> np.ndarray:

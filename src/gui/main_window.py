@@ -102,6 +102,8 @@ class MainWindow(QMainWindow):
         self._settings.open_requested.connect(self._open_image)
         self._settings.run_requested.connect(self._run_analysis)
         self._settings.auto_detect_requested.connect(self._run_scale_detection)
+        self._settings.load_params_requested.connect(self._load_params)
+        self._settings.save_params_requested.connect(self._save_params)
         main_layout.addWidget(self._settings)
 
         # 中央パネル（タブ）
@@ -154,6 +156,7 @@ class MainWindow(QMainWindow):
         self._results.reset()
         self._settings.set_run_enabled(True)
         self._settings.set_auto_detect_enabled(True)
+        self._settings.set_save_enabled(True)
         self._settings.set_scale_status("")
         self._tabs.setCurrentIndex(0)
 
@@ -299,6 +302,62 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"スケール設定: {ppu:.3f} px/µm", 5000)
         else:
             self._settings.set_scale_status("キャンセルされました")
+
+    def _load_params(self) -> None:
+        import json
+        path, _ = QFileDialog.getOpenFileName(
+            self, "パラメータを読み込む", "", "JSON ファイル (*.json);;すべてのファイル (*)"
+        )
+        if not path:
+            return
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except Exception as exc:
+            QMessageBox.critical(self, "エラー", f"JSONの読み込みに失敗しました:\n{exc}")
+            return
+
+        image_path = self._settings.set_params(data)
+
+        if image_path:
+            try:
+                self._analyzer.load_image(image_path)
+                original_rgb = cv2.cvtColor(self._analyzer.original_image, cv2.COLOR_BGR2RGB)
+                self._canvas_original.show_image(original_rgb, title=Path(image_path).name)
+                self._canvas_overlay.clear()
+                self._results.reset()
+                self._settings.set_run_enabled(True)
+                self._settings.set_auto_detect_enabled(True)
+                self._settings.set_save_enabled(True)
+                self._settings.set_scale_status("")
+                self._tabs.setCurrentIndex(0)
+                h, w = self._analyzer.gray_image.shape
+                self._status_image.setText(f"画像: {Path(image_path).name}  ({w}×{h} px)")
+                self._status_grains.setText("粒子数: --")
+            except Exception as exc:
+                QMessageBox.warning(self, "画像読み込み失敗", f"{image_path}\n\n{exc}")
+
+        self.statusBar().showMessage(f"パラメータを読み込みました: {Path(path).name}", 3000)
+
+    def _save_params(self) -> None:
+        import json
+        import dataclasses
+        path, _ = QFileDialog.getSaveFileName(
+            self, "パラメータを保存", "params.json", "JSON ファイル (*.json);;すべてのファイル (*)"
+        )
+        if not path:
+            return
+        params = self._settings.get_params()
+        data = dataclasses.asdict(params)
+        data["image_path"] = (
+            str(self._analyzer.image_path) if self._analyzer.image_path else None
+        )
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            self.statusBar().showMessage(f"パラメータを保存しました: {Path(path).name}", 3000)
+        except Exception as exc:
+            QMessageBox.critical(self, "エラー", f"保存に失敗しました:\n{exc}")
 
     def _export_chord_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(

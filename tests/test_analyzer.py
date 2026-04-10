@@ -386,3 +386,120 @@ class TestWithSampleImage:
         chord_df, grain_df = analyzer.run_pipeline(params)
         assert len(chord_df) >= 0
         assert len(grain_df) >= 0
+
+
+# ---------------------------------------------------------------------------
+# GSAT 参照データとの互換性テスト
+# ---------------------------------------------------------------------------
+
+GSAT_SAMPLE_DIR = Path(__file__).parent / "sample" / "gsat"
+
+
+@pytest.fixture
+def gsat_sample_dir() -> Path:
+    if not GSAT_SAMPLE_DIR.exists():
+        pytest.skip("GSAT sample data not found in tests/sample/gsat/")
+    return GSAT_SAMPLE_DIR
+
+
+class TestGSATCompatibility:
+    """Verify our intercept measurement matches GSAT's reference output."""
+
+    def _load_gsat_ref_chords(self, csv_path: Path, angle_deg: float) -> list[float]:
+        import csv as csv_mod
+        chords = []
+        with open(csv_path) as f:
+            reader = csv_mod.DictReader(f)
+            for row in reader:
+                if abs(float(row["Angle (deg)"]) - angle_deg) < 0.01:
+                    chords.append(float(row["Segment Distance (Pixels)"]))
+        return sorted(chords)
+
+    def _inject_binary(self, analyzer: GrainAnalyzer, tif_path: Path) -> None:
+        import cv2
+        img = cv2.imread(str(tif_path), cv2.IMREAD_GRAYSCALE)
+        assert img is not None, f"Could not load {tif_path}"
+        _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+        analyzer.gray_image = img
+        analyzer.binary_image = img
+
+    def test_sem_theta0_exact_match(
+        self, analyzer: GrainAnalyzer, gsat_sample_dir: Path
+    ) -> None:
+        tif = gsat_sample_dir / "sem_alpha_beta_ti_6al_4v_segmented.tif"
+        ref_csv = gsat_sample_dir / "sem_alpha_beta_ti_6al_4v_distances_line_grid.csv"
+        self._inject_binary(analyzer, tif)
+
+        # GSAT always pads before scanning (even at theta=0), use same params
+        analyzer.params = AnalysisParams(
+            line_spacing=60,
+            row_scan_start=0,
+            theta_start=0.0,
+            theta_end=0.0,
+            n_theta_steps=1,
+            pad_for_rotation=True,
+        )
+        df = analyzer.measure_intercepts()
+        our_chords = sorted(df["length_pixels"].to_list())
+        ref_chords = self._load_gsat_ref_chords(ref_csv, 0.0)
+
+        assert len(our_chords) == len(ref_chords), (
+            f"Chord count mismatch: ours={len(our_chords)}, ref={len(ref_chords)}"
+        )
+        assert our_chords == pytest.approx(ref_chords, abs=0.5)
+
+    def test_optical_theta0_exact_match(
+        self, analyzer: GrainAnalyzer, gsat_sample_dir: Path
+    ) -> None:
+        tif = gsat_sample_dir / "grains_steel_highlighted_segmented.tif"
+        ref_csv = gsat_sample_dir / "grains_steel_highlighted_distances_line_grid.csv"
+        self._inject_binary(analyzer, tif)
+
+        analyzer.params = AnalysisParams(
+            line_spacing=60,
+            row_scan_start=0,
+            theta_start=0.0,
+            theta_end=0.0,
+            n_theta_steps=1,
+            pad_for_rotation=True,
+        )
+        df = analyzer.measure_intercepts()
+        our_chords = sorted(df["length_pixels"].to_list())
+        ref_chords = self._load_gsat_ref_chords(ref_csv, 0.0)
+
+        assert len(our_chords) == len(ref_chords), (
+            f"Chord count mismatch: ours={len(our_chords)}, ref={len(ref_chords)}"
+        )
+        assert our_chords == pytest.approx(ref_chords, abs=0.5)
+
+    def test_sem_allangles_statistics_match(
+        self, analyzer: GrainAnalyzer, gsat_sample_dir: Path
+    ) -> None:
+        """With padding + reskeletonization, multi-angle mean should match GSAT within 5%."""
+        import csv as csv_mod
+        tif = gsat_sample_dir / "sem_alpha_beta_ti_6al_4v_segmented.tif"
+        ref_csv = gsat_sample_dir / "sem_alpha_beta_ti_6al_4v_distances_line_grid.csv"
+        self._inject_binary(analyzer, tif)
+
+        analyzer.params = AnalysisParams(
+            line_spacing=60,
+            row_scan_start=0,
+            theta_start=0.0,
+            theta_end=180.0,
+            n_theta_steps=5,
+            reskeletonize=True,
+            pad_for_rotation=True,
+        )
+        df = analyzer.measure_intercepts()
+        our_mean = df["length_pixels"].mean()
+
+        ref_chords = []
+        with open(ref_csv) as f:
+            reader = csv_mod.DictReader(f)
+            for row in reader:
+                ref_chords.append(float(row["Segment Distance (Pixels)"]))
+        ref_mean = float(np.mean(ref_chords))
+
+        assert abs(our_mean - ref_mean) / ref_mean < 0.05, (
+            f"Mean chord mismatch: ours={our_mean:.1f}, ref={ref_mean:.1f}"
+        )
