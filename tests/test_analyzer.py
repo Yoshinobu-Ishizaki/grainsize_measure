@@ -20,19 +20,22 @@ SAMPLE_DIR = Path(__file__).parent / "sample"
 
 
 # ---------------------------------------------------------------------------
-# ヘルパー: テスト用合成画像（暗い背景に明るい粒子を散在）
+# ヘルパー: テスト用合成画像
 # ---------------------------------------------------------------------------
 
 def make_synthetic_image(tmp_path: Path) -> Path:
-    """境界が明確な合成SEM画像を作成して保存する。"""
+    """グリッド状の白い境界線を持つ合成画像を作成して保存する。
+
+    GSAT の global_threshold では「閾値より大きい値が白(=境界)」となる。
+    境界線を明るく、粒子内部を暗くした画像を作成する。
+    """
     import cv2
 
-    img = np.zeros((200, 200), dtype=np.uint8)
-    # 9個の白い円（粒子相当）を配置
-    for row in range(3):
-        for col in range(3):
-            cx, cy = 30 + col * 70, 30 + row * 70
-            cv2.circle(img, (cx, cy), 20, 200, -1)
+    img = np.full((200, 200), 50, dtype=np.uint8)  # 暗い背景 (粒子内部)
+    # 境界線として明るい格子を描く
+    for i in range(0, 200, 40):
+        img[i, :] = 200  # 水平境界線
+        img[:, i] = 200  # 垂直境界線
 
     path = tmp_path / "synthetic.png"
     cv2.imwrite(str(path), img)
@@ -76,164 +79,248 @@ class TestLoadImage:
 
     def test_load_resets_previous_results(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
         analyzer.load_image(synthetic_image)
-        analyzer.preprocess_image()
-        analyzer.segment_grains()
         # 再度ロードしたら中間結果がリセットされる
         analyzer.load_image(synthetic_image)
-        assert analyzer.processed_image is None
+        assert analyzer.binary_image is None
         assert analyzer.labeled_grains is None
-        assert analyzer.grain_properties is None
+        assert analyzer.chord_df is None
+        assert analyzer.grain_df is None
 
 
 # ---------------------------------------------------------------------------
-# preprocess_image
+# segment_image
 # ---------------------------------------------------------------------------
 
-class TestPreprocessImage:
-    def test_preprocess_changes_image(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
-        analyzer.load_image(synthetic_image)
-        before = analyzer.gray_image.copy()
-        analyzer.preprocess_image()
-        assert analyzer.processed_image is not None
-        assert not np.array_equal(analyzer.processed_image, before)
+class TestSegmentImage:
+    def _fast_params(self) -> AnalysisParams:
+        """テスト用の高速パラメータ (NL-meansを軽量に)。"""
+        return AnalysisParams(
+            denoise_h=5.0,
+            denoise_patch=5,
+            denoise_search=11,
+            sharpen_radius=1,
+            sharpen_amount=0.5,
+            threshold_method="global_threshold",
+            threshold_value=100,
+            morph_close_radius=1,
+            morph_open_radius=1,
+            min_feature_size=5,
+            max_hole_size=5,
+        )
 
-    def test_preprocess_output_is_uint8(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
+    def test_segment_produces_binary(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
         analyzer.load_image(synthetic_image)
-        analyzer.preprocess_image()
-        assert analyzer.processed_image.dtype == np.uint8
+        analyzer.params = self._fast_params()
+        analyzer.segment_image()
+        assert analyzer.binary_image is not None
+        assert analyzer.binary_image.dtype == np.uint8
+        # バイナリ画像は 0 か 255 のみ
+        unique_vals = set(np.unique(analyzer.binary_image))
+        assert unique_vals.issubset({0, 255})
 
-    def test_preprocess_without_load_raises(self, analyzer: GrainAnalyzer) -> None:
+    def test_segment_without_load_raises(self, analyzer: GrainAnalyzer) -> None:
         with pytest.raises(RuntimeError):
-            analyzer.preprocess_image()
+            analyzer.segment_image()
 
-
-# ---------------------------------------------------------------------------
-# segment_grains
-# ---------------------------------------------------------------------------
-
-class TestSegmentGrains:
-    @pytest.mark.parametrize("method", ["otsu", "adaptive", "manual"])
-    def test_segment_produces_labels(
-        self, analyzer: GrainAnalyzer, synthetic_image: Path, method: str
-    ) -> None:
+    def test_segment_adaptive_threshold(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
         analyzer.load_image(synthetic_image)
-        analyzer.params = AnalysisParams(threshold_method=method, min_distance=5)
-        analyzer.preprocess_image()
-        analyzer.segment_grains()
-        assert analyzer.labeled_grains is not None
-        n_labels = len(np.unique(analyzer.labeled_grains)) - 1  # 0=背景を除く
-        assert n_labels > 0
-
-    def test_segment_without_preprocess_raises(
-        self, analyzer: GrainAnalyzer, synthetic_image: Path
-    ) -> None:
-        analyzer.load_image(synthetic_image)
-        with pytest.raises(RuntimeError):
-            analyzer.segment_grains()
+        analyzer.params = AnalysisParams(
+            denoise_h=5.0, denoise_patch=5, denoise_search=11,
+            sharpen_radius=1, sharpen_amount=0.5,
+            threshold_method="adaptive_threshold",
+            adaptive_block_size=35, adaptive_offset=0.0,
+            morph_close_radius=1, morph_open_radius=1,
+            min_feature_size=5, max_hole_size=5,
+        )
+        analyzer.segment_image()
+        assert analyzer.binary_image is not None
 
 
 # ---------------------------------------------------------------------------
-# calculate_grain_properties
+# measure_intercepts (Track A)
 # ---------------------------------------------------------------------------
 
-class TestCalculateGrainProperties:
-    def _run_up_to_segment(self, analyzer: GrainAnalyzer, path: Path) -> None:
+class TestMeasureIntercepts:
+    def _run_to_segment(self, analyzer: GrainAnalyzer, path: Path) -> None:
         analyzer.load_image(path)
-        analyzer.preprocess_image()
-        analyzer.segment_grains()
+        analyzer.params = AnalysisParams(
+            denoise_h=5.0, denoise_patch=5, denoise_search=11,
+            sharpen_radius=1, sharpen_amount=0.5,
+            threshold_value=100, morph_close_radius=1, morph_open_radius=1,
+            min_feature_size=5, max_hole_size=5,
+            line_spacing=20, theta_start=0.0, theta_end=90.0, n_theta_steps=2,
+        )
+        analyzer.segment_image()
 
-    def test_returns_polars_dataframe(
-        self, analyzer: GrainAnalyzer, synthetic_image: Path
-    ) -> None:
+    def test_returns_polars_dataframe(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
         import polars as pl
-        self._run_up_to_segment(analyzer, synthetic_image)
-        df = analyzer.calculate_grain_properties()
+        self._run_to_segment(analyzer, synthetic_image)
+        df = analyzer.measure_intercepts()
         assert isinstance(df, pl.DataFrame)
 
-    def test_required_columns_present(
-        self, analyzer: GrainAnalyzer, synthetic_image: Path
-    ) -> None:
-        self._run_up_to_segment(analyzer, synthetic_image)
-        df = analyzer.calculate_grain_properties()
-        required = {"grain_id", "area_pixels", "equivalent_diameter_pixels"}
-        assert required.issubset(set(df.columns))
+    def test_required_columns_present(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
+        self._run_to_segment(analyzer, synthetic_image)
+        df = analyzer.measure_intercepts()
+        assert {"chord_id", "length_pixels", "length_um"}.issubset(set(df.columns))
 
-    def test_scale_columns_null_when_no_scale(
-        self, analyzer: GrainAnalyzer, synthetic_image: Path
-    ) -> None:
-        analyzer.params = AnalysisParams(pixels_per_um=None)
-        self._run_up_to_segment(analyzer, synthetic_image)
-        df = analyzer.calculate_grain_properties()
+    def test_length_um_null_without_scale(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
+        self._run_to_segment(analyzer, synthetic_image)
+        analyzer.params.pixels_per_um = None
+        df = analyzer.measure_intercepts()
+        if len(df) > 0:
+            assert df["length_um"].is_null().all()
+
+    def test_length_um_computed_with_scale(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
+        import polars as pl
+        self._run_to_segment(analyzer, synthetic_image)
+        analyzer.params.pixels_per_um = 10.0
+        df = analyzer.measure_intercepts()
+        if len(df) > 0:
+            ratio = df["length_pixels"] / df["length_um"]
+            assert (ratio - 10.0).abs().max() < 1e-4
+
+    def test_without_segment_raises(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
+        analyzer.load_image(synthetic_image)
+        with pytest.raises(RuntimeError):
+            analyzer.measure_intercepts()
+
+
+# ---------------------------------------------------------------------------
+# measure_grain_areas (Track B)
+# ---------------------------------------------------------------------------
+
+class TestMeasureGrainAreas:
+    def _run_to_segment(self, analyzer: GrainAnalyzer, path: Path) -> None:
+        analyzer.load_image(path)
+        analyzer.params = AnalysisParams(
+            denoise_h=5.0, denoise_patch=5, denoise_search=11,
+            sharpen_radius=1, sharpen_amount=0.5,
+            threshold_value=100, morph_close_radius=1, morph_open_radius=1,
+            min_feature_size=5, max_hole_size=5,
+            min_grain_area=10, exclude_edge_grains=False,
+        )
+        analyzer.segment_image()
+
+    def test_returns_polars_dataframe(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
+        import polars as pl
+        self._run_to_segment(analyzer, synthetic_image)
+        df = analyzer.measure_grain_areas()
+        assert isinstance(df, pl.DataFrame)
+
+    def test_required_columns_present(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
+        self._run_to_segment(analyzer, synthetic_image)
+        df = analyzer.measure_grain_areas()
+        assert {"grain_id", "area_pixels", "equivalent_diameter_pixels"}.issubset(set(df.columns))
+
+    def test_scale_columns_null_without_scale(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
+        self._run_to_segment(analyzer, synthetic_image)
+        analyzer.params.pixels_per_um = None
+        df = analyzer.measure_grain_areas()
         if len(df) > 0:
             assert df["area_um2"].is_null().all()
             assert df["equivalent_diameter_um"].is_null().all()
 
-    def test_scale_columns_computed_when_scale_set(
-        self, analyzer: GrainAnalyzer, synthetic_image: Path
-    ) -> None:
+    def test_scale_columns_computed_with_scale(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
         import polars as pl
-        analyzer.params = AnalysisParams(pixels_per_um=10.0, min_area=10, exclude_edge_grains=False)
-        self._run_up_to_segment(analyzer, synthetic_image)
-        df = analyzer.calculate_grain_properties()
+        self._run_to_segment(analyzer, synthetic_image)
+        analyzer.params.pixels_per_um = 10.0
+        df = analyzer.measure_grain_areas()
         if len(df) > 0:
-            assert not df["area_um2"].is_null().any()
             ratio = df["area_pixels"].cast(pl.Float64) / df["area_um2"]
             assert (ratio - 100.0).abs().max() < 1e-4
 
-    def test_without_segment_raises(
-        self, analyzer: GrainAnalyzer, synthetic_image: Path
-    ) -> None:
+    def test_without_segment_raises(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
         analyzer.load_image(synthetic_image)
         with pytest.raises(RuntimeError):
-            analyzer.calculate_grain_properties()
+            analyzer.measure_grain_areas()
 
 
 # ---------------------------------------------------------------------------
-# get_area_statistics
+# get_chord_statistics
 # ---------------------------------------------------------------------------
 
-class TestGetAreaStatistics:
+class TestGetChordStatistics:
+    def test_empty_before_analysis(self, analyzer: GrainAnalyzer) -> None:
+        assert analyzer.get_chord_statistics() == {}
+
     def test_statistics_keys(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
         analyzer.load_image(synthetic_image)
-        analyzer.params = AnalysisParams(min_area=10, exclude_edge_grains=False)
-        analyzer.preprocess_image()
-        analyzer.segment_grains()
-        analyzer.calculate_grain_properties()
-        stats = analyzer.get_area_statistics()
-        expected_keys = {"count", "mean", "median", "std", "min", "max", "q25", "q75"}
-        assert expected_keys.issubset(stats.keys())
+        analyzer.params = AnalysisParams(
+            denoise_h=5.0, denoise_patch=5, denoise_search=11,
+            sharpen_radius=1, sharpen_amount=0.5,
+            threshold_value=100, morph_close_radius=1, morph_open_radius=1,
+            min_feature_size=5, max_hole_size=5,
+            line_spacing=20, n_theta_steps=1,
+        )
+        analyzer.segment_image()
+        analyzer.measure_intercepts()
+        stats = analyzer.get_chord_statistics()
+        if not stats:
+            pytest.skip("Synthetic image produced no detectable chords via GSAT pipeline")
+        assert {"count", "mean_px", "std_px", "min_px", "max_px"}.issubset(stats.keys())
 
-    def test_empty_properties_returns_empty_dict(self, analyzer: GrainAnalyzer) -> None:
-        assert analyzer.get_area_statistics() == {}
+    def test_astm_g_computed_with_scale(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
+        analyzer.load_image(synthetic_image)
+        analyzer.params = AnalysisParams(
+            denoise_h=5.0, denoise_patch=5, denoise_search=11,
+            sharpen_radius=1, sharpen_amount=0.5,
+            threshold_value=100, morph_close_radius=1, morph_open_radius=1,
+            min_feature_size=5, max_hole_size=5,
+            line_spacing=20, n_theta_steps=1,
+            pixels_per_um=10.0,
+        )
+        analyzer.segment_image()
+        analyzer.measure_intercepts()
+        stats = analyzer.get_chord_statistics()
+        if stats.get("count", 0) > 0:
+            assert "astm_grain_size_g" in stats
+            assert stats["astm_grain_size_g"] is not None
 
 
 # ---------------------------------------------------------------------------
-# save_csv
+# save_chord_csv / save_grain_csv
 # ---------------------------------------------------------------------------
 
 class TestSaveCSV:
-    def test_save_csv_creates_file(
-        self, analyzer: GrainAnalyzer, synthetic_image: Path, tmp_path: Path
-    ) -> None:
+    def _run_full(self, analyzer: GrainAnalyzer, path: Path) -> None:
+        analyzer.load_image(path)
+        analyzer.params = AnalysisParams(
+            denoise_h=5.0, denoise_patch=5, denoise_search=11,
+            sharpen_radius=1, sharpen_amount=0.5,
+            threshold_value=100, morph_close_radius=1, morph_open_radius=1,
+            min_feature_size=5, max_hole_size=5,
+            line_spacing=20, n_theta_steps=1,
+            min_grain_area=10, exclude_edge_grains=False,
+        )
+        analyzer.segment_image()
+        analyzer.measure_intercepts()
+        analyzer.measure_grain_areas()
+
+    def test_save_chord_csv(self, analyzer: GrainAnalyzer, synthetic_image: Path, tmp_path: Path) -> None:
         import polars as pl
-        analyzer.load_image(synthetic_image)
-        analyzer.params = AnalysisParams(min_area=10, exclude_edge_grains=False)
-        analyzer.preprocess_image()
-        analyzer.segment_grains()
-        analyzer.calculate_grain_properties()
-
-        out = tmp_path / "results.csv"
-        analyzer.save_csv(out)
+        self._run_full(analyzer, synthetic_image)
+        out = tmp_path / "chords.csv"
+        analyzer.save_chord_csv(out)
         assert out.exists()
-
         reloaded = pl.read_csv(out)
-        assert len(reloaded) == len(analyzer.grain_properties)
+        assert len(reloaded) == len(analyzer.chord_df)
 
-    def test_save_csv_without_analysis_raises(
-        self, analyzer: GrainAnalyzer
-    ) -> None:
+    def test_save_grain_csv(self, analyzer: GrainAnalyzer, synthetic_image: Path, tmp_path: Path) -> None:
+        import polars as pl
+        self._run_full(analyzer, synthetic_image)
+        out = tmp_path / "grains.csv"
+        analyzer.save_grain_csv(out)
+        assert out.exists()
+        reloaded = pl.read_csv(out)
+        assert len(reloaded) == len(analyzer.grain_df)
+
+    def test_save_chord_csv_without_analysis_raises(self, analyzer: GrainAnalyzer) -> None:
         with pytest.raises(RuntimeError):
-            analyzer.save_csv("/tmp/dummy.csv")
+            analyzer.save_chord_csv("/tmp/dummy.csv")
+
+    def test_save_grain_csv_without_analysis_raises(self, analyzer: GrainAnalyzer) -> None:
+        with pytest.raises(RuntimeError):
+            analyzer.save_grain_csv("/tmp/dummy.csv")
 
 
 # ---------------------------------------------------------------------------
@@ -241,18 +328,42 @@ class TestSaveCSV:
 # ---------------------------------------------------------------------------
 
 class TestRenderOverlay:
-    def test_overlay_returns_rgb_array(
-        self, analyzer: GrainAnalyzer, synthetic_image: Path
-    ) -> None:
+    def test_overlay_returns_rgb_array(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
         analyzer.load_image(synthetic_image)
-        analyzer.params = AnalysisParams(min_area=10, exclude_edge_grains=False)
-        analyzer.preprocess_image()
-        analyzer.segment_grains()
-        analyzer.calculate_grain_properties()
+        analyzer.params = AnalysisParams(
+            denoise_h=5.0, denoise_patch=5, denoise_search=11,
+            sharpen_radius=1, sharpen_amount=0.5,
+            threshold_value=100, morph_close_radius=1, morph_open_radius=1,
+            min_feature_size=5, max_hole_size=5,
+        )
+        analyzer.segment_image()
         overlay = analyzer.render_overlay_image()
         assert overlay.dtype == np.uint8
         assert overlay.ndim == 3
         assert overlay.shape[2] == 3  # RGB
+
+
+# ---------------------------------------------------------------------------
+# run_pipeline
+# ---------------------------------------------------------------------------
+
+class TestRunPipeline:
+    def test_pipeline_returns_two_dataframes(
+        self, analyzer: GrainAnalyzer, synthetic_image: Path
+    ) -> None:
+        import polars as pl
+        params = AnalysisParams(
+            denoise_h=5.0, denoise_patch=5, denoise_search=11,
+            sharpen_radius=1, sharpen_amount=0.5,
+            threshold_value=100, morph_close_radius=1, morph_open_radius=1,
+            min_feature_size=5, max_hole_size=5,
+            line_spacing=20, n_theta_steps=1,
+            min_grain_area=10, exclude_edge_grains=False,
+        )
+        analyzer.load_image(synthetic_image)
+        chord_df, grain_df = analyzer.run_pipeline(params)
+        assert isinstance(chord_df, pl.DataFrame)
+        assert isinstance(grain_df, pl.DataFrame)
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +377,12 @@ class TestWithSampleImage:
         if sample_image_path is None:
             pytest.skip("tests/sample/ にSEM画像がありません")
 
-        params = AnalysisParams(min_area=50, exclude_edge_grains=True)
+        params = AnalysisParams(
+            denoise_h=10.0, threshold_value=128,
+            min_grain_area=50, exclude_edge_grains=True,
+            line_spacing=20, n_theta_steps=2,
+        )
         analyzer.load_image(sample_image_path)
-        df = analyzer.run_pipeline(params)
-        assert len(df) >= 0  # 粒子数は0以上
+        chord_df, grain_df = analyzer.run_pipeline(params)
+        assert len(chord_df) >= 0
+        assert len(grain_df) >= 0

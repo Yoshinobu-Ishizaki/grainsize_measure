@@ -50,7 +50,7 @@ class ScaleDetectionWorker(QObject):
 
 
 class AnalysisWorker(QObject):
-    finished = pyqtSignal(object, object)  # (pl.DataFrame, np.ndarray overlay)
+    finished = pyqtSignal(object, object, object)  # (chord_df, grain_df, np.ndarray overlay)
     error = pyqtSignal(str)
 
     def __init__(self, analyzer: GrainAnalyzer, params: AnalysisParams) -> None:
@@ -60,9 +60,9 @@ class AnalysisWorker(QObject):
 
     def run(self) -> None:
         try:
-            df = self._analyzer.run_pipeline(self._params)
+            chord_df, grain_df = self._analyzer.run_pipeline(self._params)
             overlay = self._analyzer.render_overlay_image()
-            self.finished.emit(df, overlay)
+            self.finished.emit(chord_df, grain_df, overlay)
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -114,7 +114,8 @@ class MainWindow(QMainWindow):
 
         # 右パネル
         self._results = ResultsPanel()
-        self._results.export_csv_requested.connect(self._export_csv)
+        self._results.export_chord_csv_requested.connect(self._export_chord_csv)
+        self._results.export_grain_csv_requested.connect(self._export_grain_csv)
         self._results.save_image_requested.connect(self._save_image)
         main_layout.addWidget(self._results)
 
@@ -187,17 +188,21 @@ class MainWindow(QMainWindow):
         self._thread = None
         self._worker = None
 
-    def _on_analysis_done(self, df, overlay: np.ndarray) -> None:
+    def _on_analysis_done(self, chord_df, grain_df, overlay: np.ndarray) -> None:
         self._canvas_overlay.show_image(overlay, title="粒子 Overlay")
         self._tabs.setCurrentIndex(1)
 
-        stats = self._analyzer.get_area_statistics()
         ppu = self._settings.get_params().pixels_per_um
-        self._results.update_stats(stats, pixels_per_um=ppu)
+        chord_stats = self._analyzer.get_chord_statistics()
+        grain_stats = self._analyzer.get_grain_statistics()
+
+        self._results.update_chord_stats(chord_stats)
+        self._results.update_grain_stats(grain_stats, pixels_per_um=ppu)
         self._results.set_export_enabled(True)
 
-        grain_count = stats.get("count", 0)
-        self._status_grains.setText(f"粒子数: {grain_count}")
+        chord_count = chord_stats.get("count", 0)
+        grain_count = grain_stats.get("count", 0)
+        self._status_grains.setText(f"コード数: {chord_count}  粒子数: {grain_count}")
         self.statusBar().showMessage("解析が完了しました。", 5000)
         self._settings.set_run_enabled(True)
 
@@ -295,19 +300,33 @@ class MainWindow(QMainWindow):
         else:
             self._settings.set_scale_status("キャンセルされました")
 
-    def _export_csv(self) -> None:
+    def _export_chord_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "CSVを保存",
-            "grain_analysis.csv",
+            "コード長CSVを保存",
+            "chord_lengths.csv",
             "CSV ファイル (*.csv);;すべてのファイル (*)",
         )
         if not path:
             return
-
         try:
-            self._analyzer.save_csv(path)
-            self.statusBar().showMessage(f"CSVを保存しました: {path}", 5000)
+            self._analyzer.save_chord_csv(path)
+            self.statusBar().showMessage(f"コード長CSVを保存しました: {path}", 5000)
+        except Exception as exc:
+            QMessageBox.critical(self, "エラー", str(exc))
+
+    def _export_grain_csv(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "粒子面積CSVを保存",
+            "grain_areas.csv",
+            "CSV ファイル (*.csv);;すべてのファイル (*)",
+        )
+        if not path:
+            return
+        try:
+            self._analyzer.save_grain_csv(path)
+            self.statusBar().showMessage(f"粒子面積CSVを保存しました: {path}", 5000)
         except Exception as exc:
             QMessageBox.critical(self, "エラー", str(exc))
 

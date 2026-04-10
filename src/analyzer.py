@@ -1,43 +1,67 @@
 from __future__ import annotations
 
 import cv2
+import math
 import numpy as np
 import polars as pl
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from skimage import filters, segmentation, measure, morphology
+from skimage import segmentation, measure, morphology
 from skimage.feature import peak_local_max
-from skimage.util import img_as_ubyte
+from skimage.transform import rotate as ski_rotate
 from scipy import ndimage
+
+from gsat import ski_driver_functions as sdrv
+from gsat import grain_size_functions as gsz
 
 
 @dataclass
 class AnalysisParams:
-    gaussian_sigma: float = 1.0
-    contrast_factor: float = 1.2
-    threshold_method: Literal["otsu", "adaptive", "manual"] = "otsu"
-    manual_threshold: int = 128
-    min_distance: int = 10
-    min_area: int = 50
+    # --- Segmentation (GSAT pipeline) ---
+    denoise_h: float = 10.0
+    denoise_patch: int = 7
+    denoise_search: int = 21
+    sharpen_radius: int = 3
+    sharpen_amount: float = 1.2
+    threshold_method: Literal["global_threshold", "adaptive_threshold"] = "global_threshold"
+    threshold_value: int = 128
+    adaptive_block_size: int = 35
+    adaptive_offset: float = 0.0
+    morph_close_radius: int = 3
+    morph_open_radius: int = 2
+    min_feature_size: int = 50
+    max_hole_size: int = 10
+
+    # --- Intercept measurement (Track A) ---
+    line_spacing: int = 20       # pixels between parallel lines
+    theta_start: float = 0.0     # degrees
+    theta_end: float = 135.0     # degrees
+    n_theta_steps: int = 4
+
+    # --- Per-grain area measurement (Track B) ---
+    min_grain_area: int = 50
     exclude_edge_grains: bool = True
     edge_buffer: int = 5
-    pixels_per_um: float | None = None  # None = ピクセル単位のみ
+
+    # --- Scale ---
+    pixels_per_um: float | None = None
 
 
 class GrainAnalyzer:
     def __init__(self) -> None:
         self.image_path: Path | None = None
         self.original_image: np.ndarray | None = None   # BGR, uint8
-        self.gray_image: np.ndarray | None = None       # グレースケール, uint8
-        self.processed_image: np.ndarray | None = None  # 前処理済みグレースケール, uint8
-        self.labeled_grains: np.ndarray | None = None   # int32 ラベルマップ
-        self.grain_properties: pl.DataFrame | None = None
+        self.gray_image: np.ndarray | None = None       # Grayscale, uint8
+        self.binary_image: np.ndarray | None = None     # Binary, uint8 (255=boundary, 0=interior)
+        self.labeled_grains: np.ndarray | None = None   # int32 label map
+        self.chord_df: pl.DataFrame | None = None       # Track A results
+        self.grain_df: pl.DataFrame | None = None       # Track B results
         self.params: AnalysisParams = AnalysisParams()
 
     def load_image(self, path: str | Path) -> None:
-        """画像を読み込んでグレースケールに変換する。"""
+        """Load image and convert to grayscale."""
         self.image_path = Path(path)
         self.original_image = cv2.imread(str(self.image_path))
         if self.original_image is None:
@@ -48,74 +72,149 @@ class GrainAnalyzer:
         else:
             self.gray_image = self.original_image.copy()
 
-        self.processed_image = None
+        self.binary_image = None
         self.labeled_grains = None
-        self.grain_properties = None
+        self.chord_df = None
+        self.grain_df = None
 
-    def preprocess_image(self) -> None:
-        """ガウシアンブラーとコントラスト強調でセグメント精度を上げる。"""
+    def segment_image(self) -> None:
+        """Run GSAT segmentation pipeline → binary image (255=boundary, 0=interior)."""
         if self.gray_image is None:
             raise RuntimeError("load_image() を先に呼び出してください。")
 
         p = self.params
+        img = self.gray_image.copy()
 
-        # filters.gaussian は float64 の [0,1] 範囲を返すため img_as_ubyte で uint8 に戻す
-        blurred = filters.gaussian(self.gray_image, sigma=p.gaussian_sigma)
-        blurred_u8 = img_as_ubyte(blurred)
+        # 1. Denoise
+        img = sdrv.apply_driver_denoise(
+            img, ["nl_means", p.denoise_h, p.denoise_patch, p.denoise_search], quiet_in=True
+        )
 
-        # コントラスト強調
-        enhanced = np.clip(blurred_u8.astype(np.float32) * p.contrast_factor, 0, 255).astype(np.uint8)
+        # 2. Sharpen
+        img = sdrv.apply_driver_sharpen(
+            img, ["unsharp_mask", p.sharpen_radius, p.sharpen_amount], quiet_in=True
+        )
 
-        # ヒストグラム平坦化
-        self.processed_image = cv2.equalizeHist(enhanced)
+        # 3. Threshold → binary
+        if p.threshold_method == "global_threshold":
+            img = sdrv.apply_driver_thresholding(
+                img, ["global_threshold", p.threshold_value], quiet_in=True
+            )
+        else:
+            img = sdrv.apply_driver_thresholding(
+                img, ["adaptive_threshold", p.adaptive_block_size, p.adaptive_offset], quiet_in=True
+            )
 
-    def segment_grains(self) -> None:
-        """Watershedアルゴリズムで粒子をセグメントする。"""
-        if self.processed_image is None:
-            raise RuntimeError("preprocess_image() を先に呼び出してください。")
+        # 4. Morphological closing (fill gaps in boundaries)
+        # apply_driver_morph: [op_type, footprint_type, radius]
+        #   op_type: 0=closing, 1=opening; footprint_type: 1=disk
+        img = sdrv.apply_driver_morph(img, [0, 1, p.morph_close_radius], quiet_in=True)
+
+        # 5. Morphological opening (remove isolated noise)
+        img = sdrv.apply_driver_morph(img, [1, 1, p.morph_open_radius], quiet_in=True)
+
+        # 6. Remove small features / fill small holes
+        # apply_driver_del_features: ["scikit", max_hole_sz, min_feat_sz]
+        img = sdrv.apply_driver_del_features(
+            img, ["scikit", p.max_hole_size, p.min_feature_size], quiet_in=True
+        )
+
+        self.binary_image = img
+
+    def measure_intercepts(self) -> pl.DataFrame:
+        """Track A: GSAT intercept method → chord length DataFrame."""
+        if self.binary_image is None:
+            raise RuntimeError("segment_image() を先に呼び出してください。")
+
+        p = self.params
+        height, width = self.binary_image.shape
+
+        all_chord_lengths: list[float] = []
+
+        if p.n_theta_steps <= 1:
+            thetas = np.array([p.theta_start])
+        else:
+            thetas = np.linspace(p.theta_start, p.theta_end, p.n_theta_steps)
+
+        for theta in thetas:
+            # Rotate image so we can scan horizontal lines
+            if abs(theta) < 0.1:
+                rotated = self.binary_image
+            else:
+                rotated = ski_rotate(
+                    self.binary_image, theta, preserve_range=True, order=0
+                ).astype(np.uint8)
+
+            rot_h, rot_w = rotated.shape
+            start_row = p.line_spacing // 2
+
+            for row_idx in range(start_row, rot_h, p.line_spacing):
+                pixel_arr = rotated[row_idx, :]
+                segments = gsz.find_intersections(pixel_arr)
+                if len(segments) == 0:
+                    continue
+
+                # Build line coord array for measure_line_dist: shape (width, 2) as [row, col]
+                line_coords = np.column_stack([
+                    np.full(rot_w, row_idx, dtype=np.int32),
+                    np.arange(rot_w, dtype=np.int32),
+                ])
+                distances = gsz.measure_line_dist(segments, line_coords)
+                all_chord_lengths.extend(distances.tolist())
+
+        chord_ids = list(range(1, len(all_chord_lengths) + 1))
+
+        if p.pixels_per_um is not None:
+            lengths_um: list[float | None] = [l / p.pixels_per_um for l in all_chord_lengths]
+        else:
+            lengths_um = [None] * len(all_chord_lengths)
+
+        self.chord_df = pl.DataFrame(
+            {
+                "chord_id": chord_ids,
+                "length_pixels": all_chord_lengths,
+                "length_um": lengths_um,
+            },
+            schema={
+                "chord_id": pl.Int64,
+                "length_pixels": pl.Float64,
+                "length_um": pl.Float64,
+            },
+        )
+        return self.chord_df
+
+    def measure_grain_areas(self) -> pl.DataFrame:
+        """Track B: Watershed → regionprops → per-grain area DataFrame."""
+        if self.binary_image is None:
+            raise RuntimeError("segment_image() を先に呼び出してください。")
 
         p = self.params
 
-        if p.threshold_method == "otsu":
-            threshold = filters.threshold_otsu(self.processed_image)
-            binary = self.processed_image > threshold
-        elif p.threshold_method == "adaptive":
-            adaptive_thresh = filters.threshold_local(self.processed_image, block_size=35, offset=10)
-            binary = self.processed_image > adaptive_thresh
-        else:  # manual
-            binary = self.processed_image > p.manual_threshold
+        # GSAT binary: 255=boundary → invert so grain interior=True for distance transform
+        binary_grains = self.binary_image == 0  # True where grain interior
 
-        binary = morphology.closing(binary, morphology.disk(2))
-        binary = morphology.opening(binary, morphology.disk(1))
+        distance = ndimage.distance_transform_edt(binary_grains)
 
-        distance = ndimage.distance_transform_edt(binary)
-
+        max_dist = distance.max()
         coordinates = peak_local_max(
             distance,
-            min_distance=p.min_distance,
-            threshold_abs=0.3 * distance.max() if distance.max() > 0 else 0,
+            min_distance=10,
+            threshold_abs=0.3 * max_dist if max_dist > 0 else 0,
         )
         markers = np.zeros_like(distance, dtype=bool)
         if len(coordinates) > 0:
             markers[tuple(coordinates.T)] = True
-        markers = measure.label(markers)
+        markers_labeled = measure.label(markers)
 
-        self.labeled_grains = segmentation.watershed(-distance, markers, mask=binary)
+        self.labeled_grains = segmentation.watershed(-distance, markers_labeled, mask=binary_grains)
 
-    def calculate_grain_properties(self) -> pl.DataFrame:
-        """各粒子のプロパティを計算してDataFrameで返す。"""
-        if self.labeled_grains is None:
-            raise RuntimeError("segment_grains() を先に呼び出してください。")
-
-        p = self.params
-        properties = measure.regionprops(self.labeled_grains)
         height, width = self.labeled_grains.shape
+        properties = measure.regionprops(self.labeled_grains)
 
         grain_data: list[dict] = []
         for prop in properties:
-            if prop.area < p.min_area:
+            if prop.area < p.min_grain_area:
                 continue
-
             if p.exclude_edge_grains:
                 min_row, min_col, max_row, max_col = prop.bbox
                 if (
@@ -125,34 +224,27 @@ class GrainAnalyzer:
                     or max_col >= width - p.edge_buffer
                 ):
                     continue
-
             grain_data.append({
                 "grain_id": prop.label,
                 "area_pixels": prop.area,
+                "equivalent_diameter_pixels": float(prop.equivalent_diameter_area),
                 "centroid_x": float(prop.centroid[1]),
                 "centroid_y": float(prop.centroid[0]),
-                "major_axis_length": float(prop.axis_major_length),
-                "minor_axis_length": float(prop.axis_minor_length),
                 "eccentricity": float(prop.eccentricity),
                 "solidity": float(prop.solidity),
-                "equivalent_diameter_pixels": float(prop.equivalent_diameter_area),
-                "perimeter": float(prop.perimeter),
             })
 
-        df = pl.DataFrame(grain_data) if grain_data else pl.DataFrame(schema={
+        schema = {
             "grain_id": pl.Int64,
             "area_pixels": pl.Int64,
+            "equivalent_diameter_pixels": pl.Float64,
             "centroid_x": pl.Float64,
             "centroid_y": pl.Float64,
-            "major_axis_length": pl.Float64,
-            "minor_axis_length": pl.Float64,
             "eccentricity": pl.Float64,
             "solidity": pl.Float64,
-            "equivalent_diameter_pixels": pl.Float64,
-            "perimeter": pl.Float64,
-        })
+        }
+        df = pl.DataFrame(grain_data, schema=schema) if grain_data else pl.DataFrame(schema=schema)
 
-        # スケール設定がある場合は実寸列を追加
         if p.pixels_per_um is not None and len(df) > 0:
             ppu = p.pixels_per_um
             df = df.with_columns([
@@ -165,72 +257,94 @@ class GrainAnalyzer:
                 pl.lit(None, dtype=pl.Float64).alias("equivalent_diameter_um"),
             ])
 
-        self.grain_properties = df
+        self.grain_df = df
         return df
 
-    def get_area_statistics(self) -> dict:
-        """面積分布の統計量を返す。"""
-        if self.grain_properties is None or len(self.grain_properties) == 0:
+    def get_chord_statistics(self) -> dict:
+        """Chord length statistics + ASTM E112 grain size number G."""
+        if self.chord_df is None or len(self.chord_df) == 0:
             return {}
 
-        areas = self.grain_properties["area_pixels"]
+        lengths = self.chord_df["length_pixels"]
+        stats: dict = {
+            "count": len(lengths),
+            "mean_px": float(lengths.mean()),
+            "std_px": float(lengths.std()),
+            "min_px": float(lengths.min()),
+            "max_px": float(lengths.max()),
+            "mean_um": None,
+            "astm_grain_size_g": None,
+        }
+
+        p = self.params
+        if p.pixels_per_um is not None:
+            lengths_um = self.chord_df["length_um"].drop_nulls()
+            if len(lengths_um) > 0:
+                mean_um = float(lengths_um.mean())
+                stats["mean_um"] = mean_um
+                mean_mm = mean_um * 0.001
+                if mean_mm > 0:
+                    # ASTM E112: G = -6.6457 * log10(L_mm) - 3.298
+                    stats["astm_grain_size_g"] = -6.6457 * math.log10(mean_mm) - 3.298
+
+        return stats
+
+    def get_grain_statistics(self) -> dict:
+        """Per-grain area statistics."""
+        if self.grain_df is None or len(self.grain_df) == 0:
+            return {}
+
+        areas = self.grain_df["area_pixels"]
+        diams = self.grain_df["equivalent_diameter_pixels"]
         return {
             "count": len(areas),
-            "mean": float(areas.mean()),
-            "median": float(areas.median()),
-            "std": float(areas.std()),
-            "min": float(areas.min()),
-            "max": float(areas.max()),
-            "q25": float(areas.quantile(0.25, interpolation="nearest")),
-            "q75": float(areas.quantile(0.75, interpolation="nearest")),
+            "mean_area_px": float(areas.mean()),
+            "std_area_px": float(areas.std()),
+            "mean_diam_px": float(diams.mean()),
+            "std_diam_px": float(diams.std()),
         }
 
     def render_overlay_image(self) -> np.ndarray:
-        """元画像に粒子境界と粒子IDを重ねたRGB画像を返す。"""
-        if self.original_image is None or self.labeled_grains is None or self.grain_properties is None:
+        """Original image + green grain boundaries + cyan line grid scan lines."""
+        if self.original_image is None or self.binary_image is None:
             raise RuntimeError("解析が完了していません。")
 
-        # BGR → RGB
         overlay = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB).copy()
 
-        # 粒子境界を緑色で描画
-        boundary_mask = segmentation.find_boundaries(self.labeled_grains, mode="outer")
+        # Draw GSAT binary boundaries in green
+        boundary_mask = self.binary_image > 0
         overlay[boundary_mask] = [0, 220, 0]
 
-        # 採用された粒子のcentroidにIDをテキスト注釈
-        accepted_ids = set(self.grain_properties["grain_id"].to_list())
-        for prop in measure.regionprops(self.labeled_grains):
-            if prop.label in accepted_ids:
-                cy, cx = int(prop.centroid[0]), int(prop.centroid[1])
-                cv2.putText(
-                    overlay,
-                    str(prop.label),
-                    (cx, cy),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.35,
-                    (255, 255, 0),
-                    1,
-                    cv2.LINE_AA,
-                )
+        # Draw horizontal line scan positions (at theta=0 for visual reference)
+        if self.params is not None:
+            height = overlay.shape[0]
+            start_row = self.params.line_spacing // 2
+            for row_idx in range(start_row, height, self.params.line_spacing):
+                overlay[row_idx, :] = np.clip(
+                    overlay[row_idx, :].astype(np.int32) + [0, 30, 30], 0, 255
+                ).astype(np.uint8)
 
         return overlay
 
-    def save_csv(self, path: str | Path) -> None:
-        """粒子プロパティをCSVに保存する。"""
-        if self.grain_properties is None:
-            raise RuntimeError("calculate_grain_properties() を先に呼び出してください。")
-        self.grain_properties.write_csv(str(path))
+    def save_chord_csv(self, path: str | Path) -> None:
+        if self.chord_df is None:
+            raise RuntimeError("measure_intercepts() を先に呼び出してください。")
+        self.chord_df.write_csv(str(path))
+
+    def save_grain_csv(self, path: str | Path) -> None:
+        if self.grain_df is None:
+            raise RuntimeError("measure_grain_areas() を先に呼び出してください。")
+        self.grain_df.write_csv(str(path))
 
     def save_labeled_image(self, path: str | Path) -> None:
-        """overlay画像をファイルに保存する。"""
         overlay_rgb = self.render_overlay_image()
-        # OpenCV は BGR で保存する
         overlay_bgr = cv2.cvtColor(overlay_rgb, cv2.COLOR_RGB2BGR)
         cv2.imwrite(str(path), overlay_bgr)
 
-    def run_pipeline(self, params: AnalysisParams) -> pl.DataFrame:
-        """前処理→セグメント→プロパティ計算を一括実行する。"""
+    def run_pipeline(self, params: AnalysisParams) -> tuple[pl.DataFrame, pl.DataFrame]:
+        """Full pipeline: segment → intercept measurement + grain area measurement."""
         self.params = params
-        self.preprocess_image()
-        self.segment_grains()
-        return self.calculate_grain_properties()
+        self.segment_image()
+        chord_df = self.measure_intercepts()
+        grain_df = self.measure_grain_areas()
+        return chord_df, grain_df
