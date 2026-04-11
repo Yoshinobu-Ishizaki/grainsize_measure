@@ -1,0 +1,1 @@
+- @tests/sample/c2600p_600c60min_overlay.png has large grey area which seems to be grain but not detected currently. 
