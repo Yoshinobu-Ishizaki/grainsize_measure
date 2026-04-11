@@ -7,14 +7,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from PyQt6.QtWidgets import QApplication
-from gui.main_window import MainWindow
+from gui.settings_dialog import SettingsDialog
 
 
 def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName("結晶粒サイズ測定")
-    window = MainWindow()
-    window.show()
+    dialog = SettingsDialog()
+    dialog.show()
     sys.exit(app.exec())
 
 

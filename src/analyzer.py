@@ -53,6 +53,10 @@ class AnalysisParams:
     # --- Scale ---
     pixels_per_um: float | None = None
 
+    # --- ROI regions (pixel coords, None = full image) ---
+    grain_roi: tuple[int, int, int, int] | None = None   # (x, y, w, h)
+    marker_roi: tuple[int, int, int, int] | None = None  # (x, y, w, h)
+
 
 class GrainAnalyzer:
     def __init__(self) -> None:
@@ -138,6 +142,19 @@ class GrainAnalyzer:
         )
 
         self.binary_image = img
+
+    def run_segmentation(self, params: AnalysisParams) -> np.ndarray:
+        """Step 1: run GSAT pipeline on the full image → binary. Returns binary_image."""
+        self.params = params
+        self.segment_image()
+        return self.binary_image  # type: ignore[return-value]
+
+    def run_measurement(self, params: AnalysisParams) -> tuple[pl.DataFrame, pl.DataFrame]:
+        """Step 2: assumes binary_image already set by run_segmentation(). Measures only."""
+        self.params = params
+        chord_df = self.measure_intercepts()
+        grain_df = self.measure_grain_areas()
+        return chord_df, grain_df
 
     def measure_intercepts(self) -> pl.DataFrame:
         """Track A: GSAT intercept method → chord length DataFrame."""
@@ -256,6 +273,11 @@ class GrainAnalyzer:
                     or max_row >= height - p.edge_buffer
                     or max_col >= width - p.edge_buffer
                 ):
+                    continue
+            if p.grain_roi is not None:
+                rx, ry, rw, rh = p.grain_roi
+                cy, cx = prop.centroid
+                if not (rx <= cx < rx + rw and ry <= cy < ry + rh):
                     continue
             grain_data.append({
                 "grain_id": prop.label,
