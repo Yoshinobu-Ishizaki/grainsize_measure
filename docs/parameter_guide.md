@@ -290,3 +290,42 @@ Restricts grain counting and centroid filtering to a rectangular sub-area. Use t
 Restricts scale bar auto-detection to a sub-area. Use this when the scale bar is in a specific corner of the image to avoid false positives from text or other features.
 
 Both ROIs can be drawn interactively by clicking **Select ROI** in the settings dialog, or entered numerically as (x, y, width, height) in pixels.
+
+---
+
+## 6. Parameter Optimizer
+
+The parameter optimizer automatically searches for the combination of segmentation parameters that produces the most valid grain detections for your image.
+
+### Running from the GUI
+
+1. Load an image and set the **Grain ROI** (required).
+2. Optionally set the Marker ROI and run scale bar detection.
+3. From the menu: **ファイル → パラメータ最適化を実行...**
+4. The optimizer runs in the background (this may take a minute or two).
+5. When complete, the best-found parameters are loaded automatically and image processing + grain calculation start immediately.
+
+The optimizer saves two files next to the image:
+- `{stem}_params.json` — the starting parameters (current UI state)
+- `{stem}_params_optimized.json` — the best parameters found
+
+### Running from the terminal
+
+```bash
+uv run scripts/optimize_params.py --params path/to/params.json --out path/to/params_optimized.json
+```
+
+The input `params.json` must contain `image_path` and `grain_roi`. Save it from the GUI via **ファイル → パラメータを保存...** first.
+
+### What the optimizer searches
+
+The optimizer uses a two-phase search:
+
+- **Phase 1:** Exhaustive sweep of `invert_grayscale × threshold_method` (6 combinations) to find the top 2.
+- **Phase 2:** 150-sample random search over the remaining parameters (denoise, sharpen, threshold values, morphology radii, CLAHE, feature sizes) within each top combo.
+
+**Score:** `grain_count × coverage_ratio` (capped at 0.90). This rewards finding more genuine grains covering more of the ROI area.
+
+### Loading an existing optimized JSON
+
+Open **ファイル → パラメータを開く...** and select a `*_params_optimized.json` (or any params JSON). The parameters are restored and image processing starts automatically.

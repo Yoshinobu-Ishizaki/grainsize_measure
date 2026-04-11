@@ -79,14 +79,12 @@ class ViewerWindow(QMainWindow):
             viewer.set_mode(mode)
 
     def set_grain_roi(self, roi: tuple[int, int, int, int] | None) -> None:
-        self._viewer_original.set_grain_roi(roi)
+        # Original tab shows the unmodified image — no ROI rectangles there
         self._viewer_processed.set_grain_roi(roi)
-        # Overlay view shows grain colors baked into the image — no ROI rectangles
 
     def set_marker_roi(self, roi: tuple[int, int, int, int] | None) -> None:
-        self._viewer_original.set_marker_roi(roi)
+        # Original tab shows the unmodified image — no ROI rectangles there
         self._viewer_processed.set_marker_roi(roi)
-        # Overlay view shows grain colors baked into the image — no ROI rectangles
 
     # ------------------------------------------------------------------
     # Slots

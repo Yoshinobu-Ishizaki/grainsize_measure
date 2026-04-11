@@ -5,12 +5,15 @@ A Python GUI application that analyses grain structure observation images (with 
 ## Features
 
 - Automatic scale bar detection from embedded dimension markers (px/µm)
-- GSAT-based image segmentation pipeline (denoise → sharpen → threshold → morphology)
+- GSAT-based image segmentation pipeline (CLAHE → denoise → sharpen → threshold → morphology)
 - **Track A** — ASTM E112 intercept method: chord length measurement at multiple angles
 - **Track B** — Per-grain area measurement via watershed segmentation
 - Interactive ROI selection for grain area and scale bar regions
 - Overlay visualisation of detected boundaries and grain colours
 - Separate CSV export for chord data and grain data
+- **Parameter optimizer** — automatically searches for the best segmentation parameters for any image (runnable from the GUI or terminal)
+- Auto-run processing pipeline when a params JSON is loaded
+- Original image tab always shows the unmodified image; ROI and scale bar overlays appear only on the processed view
 
 ## Requirements
 

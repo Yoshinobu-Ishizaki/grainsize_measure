@@ -7,7 +7,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal
+from PyQt6.QtCore import QObject, QProcess, QThread, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -637,7 +637,7 @@ class SettingsDialog(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("結晶粒サイズ測定 v0.6.0")
+        self.setWindowTitle("結晶粒サイズ測定 v0.14.0")
         self.setMinimumWidth(380)
 
         self._analyzer = GrainAnalyzer()
@@ -655,6 +655,9 @@ class SettingsDialog(QMainWindow):
         self._original_rgb: np.ndarray | None = None
         self._processed_binary_rgb: np.ndarray | None = None
         self._scale_bar_result = None
+        self._auto_run_grain_calc: bool = False
+        self._optimizer_proc: QProcess | None = None
+        self._optimizer_out_path: Path | None = None
 
         self._build_viewer()
         self._build_menu()
@@ -700,6 +703,9 @@ class SettingsDialog(QMainWindow):
         act_save_params = file_menu.addAction("パラメータを保存...")
         act_save_params.setShortcut("Ctrl+Shift+S")
         act_save_params.triggered.connect(self._save_params)
+        file_menu.addSeparator()
+        self._act_optimize = file_menu.addAction("パラメータ最適化を実行...")
+        self._act_optimize.triggered.connect(self._run_optimizer)
         file_menu.addSeparator()
         act_quit = file_menu.addAction("終了")
         act_quit.setShortcut("Ctrl+Q")
@@ -759,6 +765,7 @@ class SettingsDialog(QMainWindow):
     # ------------------------------------------------------------------
 
     def _update_button_states(self) -> None:
+        self._act_optimize.setEnabled(self._image_loaded and self._optimizer_proc is None)
         self._act_image_process.setEnabled(self._image_loaded)
 
         self._tab_calc.btn_auto_detect.setEnabled(self._image_loaded)
@@ -816,6 +823,10 @@ class SettingsDialog(QMainWindow):
         )
         if not path:
             return
+        self._load_params_from_path(path)
+
+    def _load_params_from_path(self, path: str) -> None:
+        """Load a params JSON, restore UI state, and auto-run processing if image is available."""
         try:
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
@@ -861,26 +872,24 @@ class SettingsDialog(QMainWindow):
                 confidence="bar_only",
             )
             self._refresh_original_with_scale_bar()
-            # Clear the marker ROI overlay so the red scale bar line is visible
-            self._viewer.set_marker_roi(None)
+            self._refresh_processed_with_scale_bar()
+            self._viewer.set_marker_roi(None)  # Clear overlay so scale bar line is visible
 
         self.statusBar().showMessage(f"パラメータを読み込みました: {Path(path).name}", 3000)
 
-    def _save_params(self) -> None:
-        default_name = f"{self._image_stem}_params.json" if self._image_stem else "params.json"
-        path, _ = QFileDialog.getSaveFileName(
-            self, "パラメータを保存", default_name, "JSON ファイル (*.json);;すべてのファイル (*)"
-        )
-        if not path:
-            return
+        # Auto-run image processing → grain calculation
+        if self._image_loaded:
+            self._auto_run_grain_calc = True
+            self._image_process()
 
+    def _collect_params_dict(self) -> dict:
+        """Build the params dict that represents current UI state (for save/optimizer)."""
         proc = self._tab_process.get_processing_params()
         calc = self._tab_calc.get_calc_params()
         data = {**proc, **calc}
         data["image_path"] = (
             str(self._analyzer.image_path) if self._analyzer.image_path else None
         )
-        # Persist scale bar position so it can be restored without re-running detection
         if self._scale_bar_result is not None:
             r = self._scale_bar_result
             marker_roi = self._tab_calc._read_marker_roi()
@@ -892,12 +901,85 @@ class SettingsDialog(QMainWindow):
             data["scale_bar_x1"] = None
             data["scale_bar_x2"] = None
             data["scale_bar_y"] = None
+        return data
+
+    def _save_params(self) -> None:
+        default_name = f"{self._image_stem}_params.json" if self._image_stem else "params.json"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "パラメータを保存", default_name, "JSON ファイル (*.json);;すべてのファイル (*)"
+        )
+        if not path:
+            return
         try:
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+                json.dump(self._collect_params_dict(), f, indent=2, ensure_ascii=False)
             self.statusBar().showMessage(f"パラメータを保存しました: {Path(path).name}", 3000)
         except Exception as exc:
             QMessageBox.critical(self, "エラー", f"保存に失敗しました:\n{exc}")
+
+    # ------------------------------------------------------------------
+    # Parameter optimizer
+    # ------------------------------------------------------------------
+
+    def _run_optimizer(self) -> None:
+        if not self._image_loaded:
+            return
+        if self._optimizer_proc is not None:
+            return  # already running
+
+        grain_roi = self._tab_calc._read_grain_roi()
+        if not grain_roi:
+            QMessageBox.warning(
+                self, "最適化", "粒子領域 (Grain ROI) を設定してから最適化を実行してください。"
+            )
+            return
+
+        image_path = self._analyzer.image_path
+        if image_path is None:
+            QMessageBox.warning(self, "最適化", "画像パスが不明です。")
+            return
+
+        image_dir = Path(image_path).parent
+        input_path  = image_dir / f"{self._image_stem}_params.json"
+        output_path = image_dir / f"{self._image_stem}_params_optimized.json"
+
+        try:
+            with open(input_path, "w", encoding="utf-8") as f:
+                json.dump(self._collect_params_dict(), f, indent=2, ensure_ascii=False)
+        except Exception as exc:
+            QMessageBox.critical(self, "エラー", f"パラメータ保存失敗:\n{exc}")
+            return
+
+        script_path = Path(__file__).resolve().parent.parent.parent / "scripts" / "optimize_params.py"
+        repo_root   = script_path.parent.parent
+
+        self._optimizer_out_path = output_path
+        self._optimizer_proc = QProcess(self)
+        self._optimizer_proc.setWorkingDirectory(str(repo_root))
+        self._optimizer_proc.finished.connect(self._on_optimizer_finished)
+        self._optimizer_proc.start("uv", [
+            "run", str(script_path),
+            "--params", str(input_path),
+            "--out",    str(output_path),
+        ])
+        self._act_optimize.setEnabled(False)
+        self.statusBar().showMessage("最適化中... (時間がかかります)")
+
+    def _on_optimizer_finished(self, exit_code: int, exit_status) -> None:
+        self._optimizer_proc = None
+        self._act_optimize.setEnabled(self._image_loaded)
+
+        if exit_code != 0:
+            QMessageBox.critical(self, "最適化エラー", f"最適化スクリプトが終了コード {exit_code} で失敗しました。")
+            self.statusBar().showMessage("最適化に失敗しました。", 5000)
+            return
+
+        if self._optimizer_out_path and self._optimizer_out_path.exists():
+            self.statusBar().showMessage("最適化完了。処理を開始します。", 3000)
+            self._load_params_from_path(str(self._optimizer_out_path))
+        else:
+            QMessageBox.warning(self, "最適化", "出力ファイルが見つかりません。")
+            self.statusBar().showMessage("最適化完了 (出力なし)。", 5000)
 
     # ------------------------------------------------------------------
     # Processing actions
@@ -950,6 +1032,10 @@ class SettingsDialog(QMainWindow):
         self._calc_done = False
         self._update_button_states()
         self.statusBar().showMessage("画像処理が完了しました。", 3000)
+
+        if self._auto_run_grain_calc:
+            self._auto_run_grain_calc = False
+            self._grain_calc()
 
     def _on_image_process_error(self, message: str) -> None:
         QMessageBox.critical(self, "画像処理エラー", message)
@@ -1070,11 +1156,10 @@ class SettingsDialog(QMainWindow):
         return img
 
     def _refresh_original_with_scale_bar(self) -> None:
-        """Show original image with scale bar strip blanked + red line."""
+        """Refresh original tab with the truly unmodified image."""
         if self._original_rgb is None:
             return
-        img = self._apply_scale_bar_to_image(self._original_rgb)
-        self._viewer.show_original(img)
+        self._viewer.show_original(self._original_rgb)
 
     def _refresh_processed_with_scale_bar(self) -> None:
         """Show processed binary with scale bar strip blanked + red line."""
