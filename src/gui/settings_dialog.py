@@ -86,10 +86,12 @@ class _ScaleDetectionWorker(QObject):
         try:
             from scale_detector import detect_scale_bar  # noqa: PLC0415
             img = self._image_bgr
+            strip_start = None
             if self._marker_roi is not None:
                 x, y, w, h = self._marker_roi
                 img = img[y:y + h, x:x + w]
-            result = detect_scale_bar(img)
+                strip_start = 0  # entire cropped region is the scale bar area
+            result = detect_scale_bar(img, strip_start=strip_start)
             self.finished.emit(result)
         except Exception as exc:
             self.error.emit(str(exc))
@@ -100,9 +102,7 @@ class _ScaleDetectionWorker(QObject):
 # ---------------------------------------------------------------------------
 
 class _ImageProcessTab(QWidget):
-    """Tab 0: image processing parameters + run button."""
-
-    run_requested = pyqtSignal()
+    """Tab 0: image processing parameters."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -185,11 +185,6 @@ class _ImageProcessTab(QWidget):
 
         layout.addWidget(grp_seg)
 
-        self.btn_process = QPushButton("画像処理実行")
-        self.btn_process.setEnabled(False)
-        self.btn_process.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; }")
-        self.btn_process.clicked.connect(self.run_requested)
-        layout.addWidget(self.btn_process)
         layout.addStretch()
 
     def _on_threshold_changed(self, index: int) -> None:
@@ -237,9 +232,8 @@ class _ImageProcessTab(QWidget):
 
 
 class _GrainCalcTab(QWidget):
-    """Tab 1: scale, ROI selection, intercept+area params, grain calc button."""
+    """Tab 1: scale, ROI selection, intercept+area params."""
 
-    run_requested = pyqtSignal()
     auto_detect_requested = pyqtSignal()
     select_grain_roi_requested = pyqtSignal()
     select_marker_roi_requested = pyqtSignal()
@@ -406,11 +400,6 @@ class _GrainCalcTab(QWidget):
         self.chk_exclude_edge.toggled.connect(self.spin_edge_buffer.setEnabled)
         layout.addWidget(grp_grain)
 
-        self.btn_calc = QPushButton("粒子計算実行")
-        self.btn_calc.setEnabled(False)
-        self.btn_calc.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; }")
-        self.btn_calc.clicked.connect(self.run_requested)
-        layout.addWidget(self.btn_calc)
         layout.addStretch()
 
     # ------------------------------------------------------------------
@@ -729,8 +718,6 @@ class SettingsDialog(QMainWindow):
         self._tab_widget.addTab(self._tab_save, "保存・出力")
 
         # Connect tab signals
-        self._tab_process.run_requested.connect(self._image_process)
-        self._tab_calc.run_requested.connect(self._grain_calc)
         self._tab_calc.auto_detect_requested.connect(self._run_scale_detection)
         self._tab_calc.select_grain_roi_requested.connect(
             lambda: self._viewer.set_grain_roi_mode(True)
@@ -760,11 +747,9 @@ class SettingsDialog(QMainWindow):
     # ------------------------------------------------------------------
 
     def _update_button_states(self) -> None:
-        self._tab_process.btn_process.setEnabled(self._image_loaded)
         self._tb_process.setEnabled(self._image_loaded)
         self._act_image_process.setEnabled(self._image_loaded)
 
-        self._tab_calc.btn_calc.setEnabled(self._image_processed)
         self._tab_calc.btn_auto_detect.setEnabled(self._image_loaded)
         self._tab_calc.btn_select_grain_roi.setEnabled(self._image_loaded)
         self._tab_calc.btn_select_marker_roi.setEnabled(self._image_loaded)
@@ -881,7 +866,6 @@ class SettingsDialog(QMainWindow):
             return
 
         params = self._build_params()
-        self._tab_process.btn_process.setEnabled(False)
         self.statusBar().showMessage("画像処理中...")
 
         self._process_thread = QThread()
@@ -915,7 +899,7 @@ class SettingsDialog(QMainWindow):
     def _on_image_process_error(self, message: str) -> None:
         QMessageBox.critical(self, "画像処理エラー", message)
         self.statusBar().showMessage("画像処理中にエラーが発生しました。", 5000)
-        self._tab_process.btn_process.setEnabled(True)
+        self._update_button_states()
 
     def _grain_calc(self) -> None:
         if not self._image_processed:
@@ -924,7 +908,6 @@ class SettingsDialog(QMainWindow):
             return
 
         params = self._build_params()
-        self._tab_calc.btn_calc.setEnabled(False)
         self.statusBar().showMessage("粒子計算中...")
 
         self._calc_thread = QThread()
@@ -967,7 +950,7 @@ class SettingsDialog(QMainWindow):
     def _on_grain_calc_error(self, message: str) -> None:
         QMessageBox.critical(self, "粒子計算エラー", message)
         self.statusBar().showMessage("粒子計算中にエラーが発生しました。", 5000)
-        self._tab_calc.btn_calc.setEnabled(True)
+        self._update_button_states()
 
     # ------------------------------------------------------------------
     # Scale detection

@@ -24,18 +24,17 @@ class ViewerWindow(QMainWindow):
 
         self._viewer_original = ImageViewer()
         self._viewer_processed = ImageViewer()
+        self._viewer_overlay = ImageViewer()
 
         self._tabs.addTab(self._viewer_original, "元画像")
         self._tabs.addTab(self._viewer_processed, "処理結果")
+        self._tabs.addTab(self._viewer_overlay, "粒子オーバーレイ")
 
-        # forward ROI signals from both viewers
-        self._viewer_original.grain_roi_selected.connect(self.grain_roi_selected)
-        self._viewer_original.marker_roi_selected.connect(self.marker_roi_selected)
-        self._viewer_processed.grain_roi_selected.connect(self.grain_roi_selected)
-        self._viewer_processed.marker_roi_selected.connect(self.marker_roi_selected)
-
-        self._viewer_original.pixel_hovered.connect(self._on_pixel_hovered)
-        self._viewer_processed.pixel_hovered.connect(self._on_pixel_hovered)
+        # forward ROI signals from all viewers
+        for viewer in (self._viewer_original, self._viewer_processed, self._viewer_overlay):
+            viewer.grain_roi_selected.connect(self.grain_roi_selected)
+            viewer.marker_roi_selected.connect(self.marker_roi_selected)
+            viewer.pixel_hovered.connect(self._on_pixel_hovered)
 
         self._lbl_coords = QLabel("x: --  y: --")
         status_bar = QStatusBar()
@@ -61,29 +60,32 @@ class ViewerWindow(QMainWindow):
         self._tabs.setCurrentIndex(1)
 
     def show_overlay(self, rgb: np.ndarray) -> None:
-        self._viewer_processed.set_image(rgb)
-        self._tabs.setCurrentIndex(1)
+        self._viewer_overlay.set_image(rgb)
+        self._tabs.setCurrentIndex(2)
 
     def clear_processed(self) -> None:
         self._viewer_processed.clear()
+        self._viewer_overlay.clear()
 
     def set_grain_roi_mode(self, active: bool) -> None:
         mode = "grain_roi" if active else "none"
-        self._viewer_original.set_mode(mode)
-        self._viewer_processed.set_mode(mode)
+        for viewer in (self._viewer_original, self._viewer_processed, self._viewer_overlay):
+            viewer.set_mode(mode)
 
     def set_marker_roi_mode(self, active: bool) -> None:
         mode = "marker_roi" if active else "none"
-        self._viewer_original.set_mode(mode)
-        self._viewer_processed.set_mode(mode)
+        for viewer in (self._viewer_original, self._viewer_processed, self._viewer_overlay):
+            viewer.set_mode(mode)
 
     def set_grain_roi(self, roi: tuple[int, int, int, int] | None) -> None:
         self._viewer_original.set_grain_roi(roi)
         self._viewer_processed.set_grain_roi(roi)
+        self._viewer_overlay.set_grain_roi(roi)
 
     def set_marker_roi(self, roi: tuple[int, int, int, int] | None) -> None:
         self._viewer_original.set_marker_roi(roi)
         self._viewer_processed.set_marker_roi(roi)
+        self._viewer_overlay.set_marker_roi(roi)
 
     # ------------------------------------------------------------------
     # Slots

@@ -206,9 +206,16 @@ def _compute_pixels_per_um(
 # パブリック API
 # ---------------------------------------------------------------------------
 
-def detect_scale_bar(image_bgr: np.ndarray) -> ScaleBarResult:
-    """フル自動検出パイプライン。バー未検出時は ScaleDetectionError を投げる。"""
-    strip_start = _find_strip_start(image_bgr)
+def detect_scale_bar(
+    image_bgr: np.ndarray, strip_start: int | None = None
+) -> ScaleBarResult:
+    """フル自動検出パイプライン。バー未検出時は ScaleDetectionError を投げる。
+
+    strip_start が指定された場合はストリップ検出をスキップし、その行から下を
+    スケールバー領域として扱う（marker_roi でクロップ済み画像に渡す場合は 0 を指定）。
+    """
+    if strip_start is None:
+        strip_start = _find_strip_start(image_bgr)
     bar_x1, bar_x2, bar_y = _find_scale_bar_line(image_bgr, strip_start)
     bar_length_px = bar_x2 - bar_x1
 
