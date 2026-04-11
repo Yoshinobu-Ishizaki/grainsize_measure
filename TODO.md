@@ -1,1 +1,2 @@
 - @tests/sample/c2600p_600c60min_overlay.png has large grey area which seems to be grain but not detected currently. 
+- Grains of @tests/sample/13632_2022_901_Fig4_HTML.png should be detected by areas with similar colors respectively. Develop such code to handle this kind of image.
