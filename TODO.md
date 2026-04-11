@@ -1,0 +1,1 @@
+- @tests/sample/c2600p_asis_overlay.png shows many gray area which seems to be grain for humans eye but not detected by the app. Can you find reason for this and search better processing parameter to detect those area as grains? If you find better results, please save those parameters json file.
