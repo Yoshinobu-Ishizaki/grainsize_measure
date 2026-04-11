@@ -492,12 +492,14 @@ class GrainAnalyzer:
                     overlay[row_idx, :].astype(np.int32) + [0, 30, 30], 0, 255
                 ).astype(np.uint8)
 
-        # Draw grain number for every 10th grain (sorted top-left to bottom-right)
+        # Draw grain number for every ~1% of total grain count (sorted top-left to bottom-right)
         if self.grain_df is not None and len(self.grain_df) > 0:
             sorted_grains = self.grain_df.sort(["centroid_y", "centroid_x"])
+            total_grains = len(sorted_grains)
+            label_interval = max(1, round(total_grains * 0.01))
             h, w = overlay.shape[:2]
             for grain_num, row in enumerate(sorted_grains.iter_rows(named=True), start=1):
-                if grain_num % 5 != 0:
+                if grain_num % label_interval != 0:
                     continue
                 cx = int(row["centroid_x"])
                 cy = int(row["centroid_y"])
