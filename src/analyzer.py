@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Literal
 
 from skimage import segmentation, measure, morphology
-from skimage.feature import peak_local_max
 from skimage.transform import rotate as ski_rotate
 from scipy import ndimage
 
@@ -50,8 +49,6 @@ class AnalysisParams:
     min_grain_area: int = 50
     exclude_edge_grains: bool = True
     edge_buffer: int = 5
-    watershed_min_distance: int = 10       # min px between distance-map peaks
-    watershed_smoothing_sigma: float = 3.0 # Gaussian sigma applied to distance map before peak detection
 
     # --- Scale ---
     pixels_per_um: float | None = None
@@ -254,22 +251,16 @@ class GrainAnalyzer:
 
         distance = ndimage.distance_transform_edt(binary_grains)
 
-        # Smooth the distance map to suppress spurious secondary peaks inside
-        # large grains (prevents watershed over-segmentation / grain splitting)
-        if p.watershed_smoothing_sigma > 0:
-            distance_smooth = ndimage.gaussian_filter(distance, sigma=p.watershed_smoothing_sigma)
-        else:
-            distance_smooth = distance
-
-        # No threshold_abs: a global fraction kills markers for small grains
-        coordinates = peak_local_max(
-            distance_smooth,
-            min_distance=p.watershed_min_distance,
-        )
-        markers = np.zeros_like(distance, dtype=bool)
-        if len(coordinates) > 0:
-            markers[tuple(coordinates.T)] = True
-        markers_labeled = measure.label(markers)
+        # One marker per connected interior component — guarantees no grain is
+        # ever split by watershed regardless of grain size or shape.
+        labeled_components = measure.label(binary_grains)
+        markers_labeled = np.zeros_like(labeled_components)
+        for cid in range(1, labeled_components.max() + 1):
+            component_mask = labeled_components == cid
+            local_dist = distance * component_mask
+            if local_dist.max() > 0:
+                peak = np.unravel_index(local_dist.argmax(), local_dist.shape)
+                markers_labeled[peak] = cid
 
         self.labeled_grains = segmentation.watershed(-distance, markers_labeled, mask=binary_grains)
 
