@@ -413,6 +413,19 @@ class _GrainCalcTab(QWidget):
         form_grain.addRow("端部バッファ (px):", self.spin_edge_buffer)
 
         self.chk_exclude_edge.toggled.connect(self.spin_edge_buffer.setEnabled)
+
+        self.spin_watershed_min_dist = QSpinBox()
+        self.spin_watershed_min_dist.setRange(1, 100)
+        self.spin_watershed_min_dist.setValue(10)
+        form_grain.addRow("ウォーターシェッド最小距離 (px):", self.spin_watershed_min_dist)
+
+        self.spin_watershed_sigma = QDoubleSpinBox()
+        self.spin_watershed_sigma.setRange(0.0, 20.0)
+        self.spin_watershed_sigma.setSingleStep(0.5)
+        self.spin_watershed_sigma.setDecimals(1)
+        self.spin_watershed_sigma.setValue(3.0)
+        form_grain.addRow("距離平滑化σ:", self.spin_watershed_sigma)
+
         layout.addWidget(grp_grain)
 
         layout.addStretch()
@@ -502,6 +515,8 @@ class _GrainCalcTab(QWidget):
             "min_grain_area": self.spin_min_grain_area.value(),
             "exclude_edge_grains": self.chk_exclude_edge.isChecked(),
             "edge_buffer": self.spin_edge_buffer.value(),
+            "watershed_min_distance": self.spin_watershed_min_dist.value(),
+            "watershed_smoothing_sigma": self.spin_watershed_sigma.value(),
         }
 
     def set_calc_params(self, data: dict) -> None:
@@ -529,6 +544,8 @@ class _GrainCalcTab(QWidget):
         self.spin_min_grain_area.setValue(int(data.get("min_grain_area", 50)))
         self.chk_exclude_edge.setChecked(bool(data.get("exclude_edge_grains", True)))
         self.spin_edge_buffer.setValue(int(data.get("edge_buffer", 5)))
+        self.spin_watershed_min_dist.setValue(int(data.get("watershed_min_distance", 10)))
+        self.spin_watershed_sigma.setValue(float(data.get("watershed_smoothing_sigma", 3.0)))
 
     def set_scale_from_detection(self, pixels_per_um: float, status_text: str) -> None:
         self.spin_pixels_per_um.setValue(pixels_per_um)

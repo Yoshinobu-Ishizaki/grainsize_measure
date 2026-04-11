@@ -27,6 +27,8 @@
   "min_grain_area": 50,
   "exclude_edge_grains": true,
   "edge_buffer": 5,
+  "watershed_min_distance": 10,
+  "watershed_smoothing_sigma": 3.0,
   "grain_roi": null,
   "marker_roi": null
 }
