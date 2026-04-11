@@ -104,10 +104,6 @@ class _ScaleDetectionWorker(QObject):
 class _ImageProcessTab(QWidget):
     """Tab 0: image processing parameters."""
 
-    open_image_requested = pyqtSignal()
-    open_params_requested = pyqtSignal()
-    image_process_requested = pyqtSignal()
-
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         scroll = QScrollArea(self)
@@ -122,48 +118,35 @@ class _ImageProcessTab(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        # --- Open / process buttons ---
-        btn_row = QHBoxLayout()
-        btn_open = QPushButton("画像を開く")
-        btn_open.clicked.connect(self.open_image_requested)
-        btn_open_params = QPushButton("パラメータを開く")
-        btn_open_params.clicked.connect(self.open_params_requested)
-        self.btn_process = QPushButton("画像処理を実行")
-        self.btn_process.setEnabled(False)
-        self.btn_process.clicked.connect(self.image_process_requested)
-        btn_row.addWidget(btn_open)
-        btn_row.addWidget(btn_open_params)
-        btn_row.addWidget(self.btn_process)
-        layout.addLayout(btn_row)
-
         # --- Segmentation ---
         grp_seg = QGroupBox("セグメンテーション (GSAT)")
         form_seg = QFormLayout(grp_seg)
 
         self.chk_invert = QCheckBox("グレースケール反転 (暗い境界線)")
-        self.chk_invert.setChecked(False)
+        self.chk_invert.setChecked(True)
         form_seg.addRow(self.chk_invert)
 
         self.spin_denoise_h = QDoubleSpinBox()
         self.spin_denoise_h.setRange(0.01, 100.0)
         self.spin_denoise_h.setDecimals(3)
         self.spin_denoise_h.setSingleStep(0.01)
-        self.spin_denoise_h.setValue(10.0)
+        self.spin_denoise_h.setValue(0.04)
         form_seg.addRow("ノイズ除去 h:", self.spin_denoise_h)
 
         self.spin_sharpen_radius = QSpinBox()
         self.spin_sharpen_radius.setRange(0, 20)
-        self.spin_sharpen_radius.setValue(3)
+        self.spin_sharpen_radius.setValue(2)
         form_seg.addRow("鮮鋭化半径:", self.spin_sharpen_radius)
 
         self.spin_sharpen_amount = QDoubleSpinBox()
         self.spin_sharpen_amount.setRange(0.0, 10.0)
         self.spin_sharpen_amount.setSingleStep(0.1)
-        self.spin_sharpen_amount.setValue(1.2)
+        self.spin_sharpen_amount.setValue(0.3)
         form_seg.addRow("鮮鋭化強度:", self.spin_sharpen_amount)
 
         self.combo_threshold = QComboBox()
         self.combo_threshold.addItems(["グローバル閾値", "適応的閾値", "ヒステリシス閾値"])
+        self.combo_threshold.setCurrentIndex(2)
         form_seg.addRow("閾値方法:", self.combo_threshold)
 
         self.spin_threshold_value = QSpinBox()
@@ -174,7 +157,7 @@ class _ImageProcessTab(QWidget):
         self.spin_threshold_high = QSpinBox()
         self.spin_threshold_high.setRange(0, 255)
         self.spin_threshold_high.setValue(200)
-        self.spin_threshold_high.setEnabled(False)
+        self.spin_threshold_high.setEnabled(True)   # hysteresis is default
         form_seg.addRow("閾値 (高):", self.spin_threshold_high)
 
         self.spin_adaptive_block = QSpinBox()
@@ -198,7 +181,7 @@ class _ImageProcessTab(QWidget):
 
         self.spin_min_feature = QSpinBox()
         self.spin_min_feature.setRange(1, 10000)
-        self.spin_min_feature.setValue(50)
+        self.spin_min_feature.setValue(64)
         form_seg.addRow("最小フィーチャ (px²):", self.spin_min_feature)
 
         layout.addWidget(grp_seg)
@@ -218,8 +201,8 @@ class _ImageProcessTab(QWidget):
         return {
             "invert_grayscale": self.chk_invert.isChecked(),
             "denoise_h": self.spin_denoise_h.value(),
-            "denoise_patch": 7,
-            "denoise_search": 21,
+            "denoise_patch": 5,
+            "denoise_search": 7,
             "sharpen_radius": self.spin_sharpen_radius.value(),
             "sharpen_amount": self.spin_sharpen_amount.value(),
             "threshold_method": method_map[self.combo_threshold.currentIndex()],
@@ -235,18 +218,18 @@ class _ImageProcessTab(QWidget):
 
     def set_processing_params(self, data: dict) -> None:
         method_map = {"global_threshold": 0, "adaptive_threshold": 1, "hysteresis_threshold": 2}
-        self.chk_invert.setChecked(bool(data.get("invert_grayscale", False)))
-        self.spin_denoise_h.setValue(float(data.get("denoise_h", 10.0)))
-        self.spin_sharpen_radius.setValue(int(data.get("sharpen_radius", 3)))
-        self.spin_sharpen_amount.setValue(float(data.get("sharpen_amount", 1.2)))
-        method = data.get("threshold_method", "global_threshold")
-        self.combo_threshold.setCurrentIndex(method_map.get(method, 0))
+        self.chk_invert.setChecked(bool(data.get("invert_grayscale", True)))
+        self.spin_denoise_h.setValue(float(data.get("denoise_h", 0.04)))
+        self.spin_sharpen_radius.setValue(int(data.get("sharpen_radius", 2)))
+        self.spin_sharpen_amount.setValue(float(data.get("sharpen_amount", 0.3)))
+        method = data.get("threshold_method", "hysteresis_threshold")
+        self.combo_threshold.setCurrentIndex(method_map.get(method, 2))
         self.spin_threshold_value.setValue(int(data.get("threshold_value", 128)))
         self.spin_threshold_high.setValue(int(data.get("threshold_high", 200)))
         self.spin_adaptive_block.setValue(int(data.get("adaptive_block_size", 35)))
         self.spin_morph_close.setValue(int(data.get("morph_close_radius", 1)))
         self.spin_morph_open.setValue(int(data.get("morph_open_radius", 0)))
-        self.spin_min_feature.setValue(int(data.get("min_feature_size", 50)))
+        self.spin_min_feature.setValue(int(data.get("min_feature_size", 64)))
 
 
 class _GrainCalcTab(QWidget):
@@ -255,7 +238,6 @@ class _GrainCalcTab(QWidget):
     auto_detect_requested = pyqtSignal()
     select_grain_roi_requested = pyqtSignal()
     select_marker_roi_requested = pyqtSignal()
-    grain_calc_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -376,7 +358,7 @@ class _GrainCalcTab(QWidget):
 
         self.spin_line_spacing = QSpinBox()
         self.spin_line_spacing.setRange(5, 500)
-        self.spin_line_spacing.setValue(20)
+        self.spin_line_spacing.setValue(60)
         form_intercept.addRow("ライン間隔 (px):", self.spin_line_spacing)
 
         self.spin_theta_start = QDoubleSpinBox()
@@ -388,13 +370,21 @@ class _GrainCalcTab(QWidget):
         self.spin_theta_end = QDoubleSpinBox()
         self.spin_theta_end.setRange(0.0, 180.0)
         self.spin_theta_end.setSingleStep(15.0)
-        self.spin_theta_end.setValue(135.0)
+        self.spin_theta_end.setValue(180.0)
         form_intercept.addRow("角度 終了 (°):", self.spin_theta_end)
 
         self.spin_n_theta = QSpinBox()
         self.spin_n_theta.setRange(1, 36)
-        self.spin_n_theta.setValue(4)
+        self.spin_n_theta.setValue(5)
         form_intercept.addRow("角度 分割数:", self.spin_n_theta)
+
+        self.chk_reskeletonize = QCheckBox("再スケルトン化")
+        self.chk_reskeletonize.setChecked(True)
+        form_intercept.addRow(self.chk_reskeletonize)
+
+        self.chk_pad_for_rotation = QCheckBox("回転用パディング")
+        self.chk_pad_for_rotation.setChecked(True)
+        form_intercept.addRow(self.chk_pad_for_rotation)
 
         layout.addWidget(grp_intercept)
 
@@ -418,12 +408,6 @@ class _GrainCalcTab(QWidget):
 
         self.chk_exclude_edge.toggled.connect(self.spin_edge_buffer.setEnabled)
         layout.addWidget(grp_grain)
-
-        # --- Grain calc button ---
-        self.btn_grain_calc = QPushButton("粒子計算を実行")
-        self.btn_grain_calc.setEnabled(False)
-        self.btn_grain_calc.clicked.connect(self.grain_calc_requested)
-        layout.addWidget(self.btn_grain_calc)
 
         layout.addStretch()
 
@@ -507,8 +491,8 @@ class _GrainCalcTab(QWidget):
             "theta_start": self.spin_theta_start.value(),
             "theta_end": self.spin_theta_end.value(),
             "n_theta_steps": self.spin_n_theta.value(),
-            "reskeletonize": False,
-            "pad_for_rotation": False,
+            "reskeletonize": self.chk_reskeletonize.isChecked(),
+            "pad_for_rotation": self.chk_pad_for_rotation.isChecked(),
             "min_grain_area": self.spin_min_grain_area.value(),
             "exclude_edge_grains": self.chk_exclude_edge.isChecked(),
             "edge_buffer": self.spin_edge_buffer.value(),
@@ -530,10 +514,12 @@ class _GrainCalcTab(QWidget):
         else:
             self._clear_marker_roi()
 
-        self.spin_line_spacing.setValue(int(data.get("line_spacing", 20)))
+        self.spin_line_spacing.setValue(int(data.get("line_spacing", 60)))
         self.spin_theta_start.setValue(float(data.get("theta_start", 0.0)))
-        self.spin_theta_end.setValue(float(data.get("theta_end", 135.0)))
-        self.spin_n_theta.setValue(int(data.get("n_theta_steps", 4)))
+        self.spin_theta_end.setValue(float(data.get("theta_end", 180.0)))
+        self.spin_n_theta.setValue(int(data.get("n_theta_steps", 5)))
+        self.chk_reskeletonize.setChecked(bool(data.get("reskeletonize", True)))
+        self.chk_pad_for_rotation.setChecked(bool(data.get("pad_for_rotation", True)))
         self.spin_min_grain_area.setValue(int(data.get("min_grain_area", 50)))
         self.chk_exclude_edge.setChecked(bool(data.get("exclude_edge_grains", True)))
         self.spin_edge_buffer.setValue(int(data.get("edge_buffer", 5)))
@@ -547,12 +533,7 @@ class _GrainCalcTab(QWidget):
 
 
 class _SaveExportTab(QWidget):
-    """Tab 2: results display + export buttons."""
-
-    save_image_requested = pyqtSignal()
-    save_params_requested = pyqtSignal()
-    export_chord_csv_requested = pyqtSignal()
-    export_grain_csv_requested = pyqtSignal()
+    """Tab 2: results display (export/save actions are in the menu)."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -566,10 +547,6 @@ class _SaveExportTab(QWidget):
         self.lbl_chord_stats.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.lbl_chord_stats.setWordWrap(True)
         chord_layout.addWidget(self.lbl_chord_stats)
-        self.btn_export_chord_csv = QPushButton("コード長 CSV エクスポート")
-        self.btn_export_chord_csv.setEnabled(False)
-        self.btn_export_chord_csv.clicked.connect(self.export_chord_csv_requested)
-        chord_layout.addWidget(self.btn_export_chord_csv)
         layout.addWidget(grp_chord)
 
         grp_grain = QGroupBox("粒子面積計測")
@@ -578,22 +555,7 @@ class _SaveExportTab(QWidget):
         self.lbl_grain_stats.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.lbl_grain_stats.setWordWrap(True)
         grain_layout.addWidget(self.lbl_grain_stats)
-        self.btn_export_grain_csv = QPushButton("粒子面積 CSV エクスポート")
-        self.btn_export_grain_csv.setEnabled(False)
-        self.btn_export_grain_csv.clicked.connect(self.export_grain_csv_requested)
-        grain_layout.addWidget(self.btn_export_grain_csv)
         layout.addWidget(grp_grain)
-
-        save_row = QHBoxLayout()
-        self.btn_save_image = QPushButton("画像を保存")
-        self.btn_save_image.setEnabled(False)
-        self.btn_save_image.clicked.connect(self.save_image_requested)
-        self.btn_save_params = QPushButton("パラメータを保存")
-        self.btn_save_params.setEnabled(False)
-        self.btn_save_params.clicked.connect(self.save_params_requested)
-        save_row.addWidget(self.btn_save_image)
-        save_row.addWidget(self.btn_save_params)
-        layout.addLayout(save_row)
 
         layout.addStretch()
 
@@ -635,18 +597,9 @@ class _SaveExportTab(QWidget):
                 lines.append(f"平均直径: {mean_diam:.1f} px")
         self.lbl_grain_stats.setText("\n".join(lines))
 
-    def set_export_enabled(self, enabled: bool) -> None:
-        self.btn_export_chord_csv.setEnabled(enabled)
-        self.btn_export_grain_csv.setEnabled(enabled)
-        self.btn_save_image.setEnabled(enabled)
-
-    def set_save_params_enabled(self, enabled: bool) -> None:
-        self.btn_save_params.setEnabled(enabled)
-
     def reset(self) -> None:
         self.lbl_chord_stats.setText("（解析前）")
         self.lbl_grain_stats.setText("（解析前）")
-        self.set_export_enabled(False)
 
 
 # ---------------------------------------------------------------------------
@@ -658,7 +611,7 @@ class SettingsDialog(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("結晶粒サイズ測定 v0.5.0")
+        self.setWindowTitle("結晶粒サイズ測定 v0.6.0")
         self.setMinimumWidth(380)
 
         self._analyzer = GrainAnalyzer()
@@ -698,25 +651,33 @@ class SettingsDialog(QMainWindow):
 
         file_menu = menu_bar.addMenu("ファイル")
         act_open = file_menu.addAction("画像を開く...")
+        act_open.setShortcut("Ctrl+O")
         act_open.triggered.connect(self._open_image)
         act_open_params = file_menu.addAction("パラメータを開く...")
+        act_open_params.setShortcut("Ctrl+P")
         act_open_params.triggered.connect(self._open_params)
         act_save_params = file_menu.addAction("パラメータを保存...")
+        act_save_params.setShortcut("Ctrl+Shift+S")
         act_save_params.triggered.connect(self._save_params)
         file_menu.addSeparator()
         act_quit = file_menu.addAction("終了")
+        act_quit.setShortcut("Ctrl+Q")
         act_quit.triggered.connect(self.close)
 
         proc_menu = menu_bar.addMenu("処理")
         self._act_image_process = proc_menu.addAction("画像処理")
+        self._act_image_process.setShortcut("F5")
         self._act_image_process.triggered.connect(self._image_process)
         self._act_grain_calc = proc_menu.addAction("粒子計算")
+        self._act_grain_calc.setShortcut("F6")
         self._act_grain_calc.triggered.connect(self._grain_calc)
         proc_menu.addSeparator()
         self._act_save_image = proc_menu.addAction("画像を保存...")
         self._act_save_image.triggered.connect(self._save_image)
-        self._act_export_csv = proc_menu.addAction("CSVエクスポート...")
-        self._act_export_csv.triggered.connect(self._export_grain_csv)
+        self._act_export_chord_csv = proc_menu.addAction("コード長 CSV エクスポート...")
+        self._act_export_chord_csv.triggered.connect(self._export_chord_csv)
+        self._act_export_grain_csv = proc_menu.addAction("粒子面積 CSV エクスポート...")
+        self._act_export_grain_csv.triggered.connect(self._export_grain_csv)
 
     def _build_tabs(self) -> None:
         self._tab_widget = QTabWidget()
@@ -731,10 +692,6 @@ class SettingsDialog(QMainWindow):
         self._tab_widget.addTab(self._tab_save, "保存・出力")
 
         # Connect tab signals
-        self._tab_process.open_image_requested.connect(self._open_image)
-        self._tab_process.open_params_requested.connect(self._open_params)
-        self._tab_process.image_process_requested.connect(self._image_process)
-        self._tab_calc.grain_calc_requested.connect(self._grain_calc)
         self._tab_calc.auto_detect_requested.connect(self._run_scale_detection)
         self._tab_calc.select_grain_roi_requested.connect(
             lambda: self._viewer.set_grain_roi_mode(True)
@@ -744,11 +701,6 @@ class SettingsDialog(QMainWindow):
         )
         self._tab_calc.grain_roi_changed.connect(self._on_grain_roi_spinbox_changed)
         self._tab_calc.marker_roi_changed.connect(self._on_marker_roi_spinbox_changed)
-
-        self._tab_save.save_image_requested.connect(self._save_image)
-        self._tab_save.save_params_requested.connect(self._save_params)
-        self._tab_save.export_chord_csv_requested.connect(self._export_chord_csv)
-        self._tab_save.export_grain_csv_requested.connect(self._export_grain_csv)
 
     def _build_status_bar(self) -> None:
         self._lbl_status_image = QLabel("画像: なし")
@@ -764,18 +716,16 @@ class SettingsDialog(QMainWindow):
     # ------------------------------------------------------------------
 
     def _update_button_states(self) -> None:
-        self._tab_process.btn_process.setEnabled(self._image_loaded)
         self._act_image_process.setEnabled(self._image_loaded)
 
         self._tab_calc.btn_auto_detect.setEnabled(self._image_loaded)
         self._tab_calc.btn_select_grain_roi.setEnabled(self._image_loaded)
         self._tab_calc.btn_select_marker_roi.setEnabled(self._image_loaded)
-        self._tab_calc.btn_grain_calc.setEnabled(self._image_processed)
         self._act_grain_calc.setEnabled(self._image_processed)
 
-        self._tab_save.set_export_enabled(self._calc_done)
-        self._tab_save.set_save_params_enabled(self._image_loaded)
         self._act_save_image.setEnabled(self._calc_done)
+        self._act_export_chord_csv.setEnabled(self._calc_done)
+        self._act_export_grain_csv.setEnabled(self._calc_done)
 
     # ------------------------------------------------------------------
     # File actions
