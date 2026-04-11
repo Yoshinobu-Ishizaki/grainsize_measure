@@ -380,6 +380,50 @@ class GrainAnalyzer:
         [160,  80, 220],   # purple
     ]
 
+    @staticmethod
+    def _build_adjacency(labeled: np.ndarray) -> dict[int, set[int]]:
+        """Build grain adjacency graph by Voronoi-expanding labels across boundaries.
+
+        Watershed boundaries can be several pixels thick, so direct pixel-neighbour
+        checks find nothing.  expand_labels floods each grain label into the zero-
+        valued boundary region; after expansion, adjacent grains touch directly and
+        a simple 1-step neighbour comparison finds all pairs.
+        """
+        from skimage.segmentation import expand_labels
+        expanded = expand_labels(labeled, distance=20)
+        adj: dict[int, set[int]] = {}
+        for a, b in [
+            (expanded[:-1, :], expanded[1:, :]),
+            (expanded[:, :-1], expanded[:, 1:]),
+        ]:
+            diff = (a != b) & (a > 0) & (b > 0)
+            pairs = np.column_stack((a[diff], b[diff]))
+            for u, v in set(map(tuple, pairs.tolist())):
+                adj.setdefault(u, set()).add(v)
+                adj.setdefault(v, set()).add(u)
+        return adj
+
+    @staticmethod
+    def _greedy_color(adj: dict[int, set[int]], grain_ids: list[int]) -> dict[int, int]:
+        """Assign palette indices to grains so no two adjacent grains share a color.
+
+        Uses Welsh-Powell heuristic: process grains in descending degree order.
+        Falls back to color 0 if the palette is exhausted (should not happen for
+        planar graphs with a 5-color palette).
+        """
+        sorted_ids = sorted(grain_ids, key=lambda g: len(adj.get(g, set())), reverse=True)
+        color_map: dict[int, int] = {}
+        n_colors = len(GrainAnalyzer._GRAIN_PALETTE)
+        for g in sorted_ids:
+            used = {color_map[nb] for nb in adj.get(g, set()) if nb in color_map}
+            for c in range(n_colors):
+                if c not in used:
+                    color_map[g] = c
+                    break
+            else:
+                color_map[g] = 0  # fallback if palette exhausted
+        return color_map
+
     def render_overlay_image(self) -> np.ndarray:
         """Original image + per-grain colors + white boundaries + cyan scan lines."""
         if self.original_image is None or self.binary_image is None:
@@ -389,9 +433,12 @@ class GrainAnalyzer:
 
         # Color only accepted grains (those in grain_df, i.e. within grain_roi and filters)
         if self.labeled_grains is not None and self.grain_df is not None:
-            accepted_ids = set(self.grain_df["grain_id"].to_list())
+            accepted_ids = self.grain_df["grain_id"].to_list()
+            adj = self._build_adjacency(self.labeled_grains)
+            color_map = self._greedy_color(adj, accepted_ids)
             for i, label_id in enumerate(sorted(accepted_ids)):
-                color = np.array(self._GRAIN_PALETTE[i % len(self._GRAIN_PALETTE)], dtype=np.float32)
+                palette_idx = color_map.get(label_id, i % len(self._GRAIN_PALETTE))
+                color = np.array(self._GRAIN_PALETTE[palette_idx], dtype=np.float32)
                 mask = self.labeled_grains == label_id
                 overlay[mask] = (
                     overlay[mask].astype(np.float32) * 0.5 + color * 0.5
