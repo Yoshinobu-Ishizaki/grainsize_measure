@@ -141,8 +141,16 @@ class _ImageLabel(QLabel):
         painter.drawRect(disp_rect)
 
         text = f"{label} ({roi.x()}, {roi.y()}, {roi.width()}×{roi.height()})"
+        text_pos = disp_rect.topLeft() + QPoint(4, 14)
+        fm = painter.fontMetrics()
+        text_w = fm.horizontalAdvance(text)
+        text_h = fm.height()
+        # Filled dark background behind text for legibility on any image content
+        bg = QRect(text_pos.x() - 2, text_pos.y() - fm.ascent() - 1, text_w + 4, text_h + 2)
+        painter.fillRect(bg, QColor(0, 0, 0, 180))
+        # Text in border color on top
         painter.setPen(border)
-        painter.drawText(disp_rect.topLeft() + QPoint(4, 14), text)
+        painter.drawText(text_pos, text)
 
     # ------------------------------------------------------------------
     # Coordinate helpers

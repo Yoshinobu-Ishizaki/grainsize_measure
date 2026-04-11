@@ -9,6 +9,7 @@ import numpy as np
 
 from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -645,13 +646,24 @@ class SettingsDialog(QMainWindow):
 
     def _build_viewer(self) -> None:
         self._viewer = ViewerWindow()
-        self._viewer.show()
-        # Position viewer to the right of the dialog
-        dg = self.frameGeometry()
-        self._viewer.move(dg.right() + 20, dg.top())
+        # Do NOT show here — position_and_show() will move then show both windows
 
         self._viewer.grain_roi_selected.connect(self._on_viewer_grain_roi)
         self._viewer.marker_roi_selected.connect(self._on_viewer_marker_roi)
+
+    def position_and_show(self) -> None:
+        """Position both windows before showing them.
+
+        Mutter ignores move() calls after a window is already mapped.
+        Moving before show() is the only reliable way to set initial position.
+        """
+        avail = QApplication.primaryScreen().availableGeometry()
+        self.move(avail.left(), avail.top())
+        # Frame width ≈ minimumWidth + WM decoration (~28 px observed)
+        viewer_x = avail.left() + self.minimumWidth() + 28 + 10
+        self._viewer.move(viewer_x, avail.top())
+        self.show()
+        self._viewer.show()
 
     def _build_menu(self) -> None:
         menu_bar = self.menuBar()
@@ -696,7 +708,7 @@ class SettingsDialog(QMainWindow):
 
         self._tab_widget.addTab(self._tab_process, "画像処理")
         self._tab_widget.addTab(self._tab_calc, "粒子計算")
-        self._tab_widget.addTab(self._tab_save, "保存・出力")
+        self._tab_widget.addTab(self._tab_save, "計算結果")
 
         # Connect tab signals
         self._tab_calc.auto_detect_requested.connect(self._run_scale_detection)

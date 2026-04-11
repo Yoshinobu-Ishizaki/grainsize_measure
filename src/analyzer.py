@@ -429,7 +429,8 @@ class GrainAnalyzer:
         if self.original_image is None or self.binary_image is None:
             raise RuntimeError("解析が完了していません。")
 
-        overlay = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB).copy()
+        gray = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
+        overlay = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB).copy()
 
         # Color only accepted grains (those in grain_df, i.e. within grain_roi and filters)
         if self.labeled_grains is not None and self.grain_df is not None:
