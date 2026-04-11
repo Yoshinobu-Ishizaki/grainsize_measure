@@ -183,6 +183,7 @@ def main() -> None:
     phase1_results: list[tuple[int, dict]] = []
 
     log("\n=== Phase 1: invert × threshold_method sweep ===")
+    phase1_step = 0
     for inv in inverts:
         for method in methods:
             p = dict_to_params(base_params_no_roi, {
@@ -193,6 +194,8 @@ def main() -> None:
             label = f"invert={inv}, method={method}"
             log(f"  {label:60s}  score={s:.2f}")
             phase1_results.append((s, {"invert_grayscale": inv, "threshold_method": method}))
+            phase1_step += 1
+            log(f"##PHASE:1:{phase1_step}:6")
 
     phase1_results.sort(key=lambda x: x[0], reverse=True)
     top2_combos = [d for _, d in phase1_results[:2]]
@@ -215,6 +218,7 @@ def main() -> None:
         base_for_phase2 = dict_to_params(base_params_no_roi, base_combo)
         for _ in range(args.phase2_samples):
             iteration += 1
+            log(f"##PHASE:2:{iteration}:{total}")
             p = random_sample(base_for_phase2, rng)
             # Enforce adaptive_block_size must be odd
             if p.threshold_method == "adaptive_threshold" and p.adaptive_block_size % 2 == 0:
@@ -228,6 +232,7 @@ def main() -> None:
                       f"invert={p.invert_grayscale}, method={p.threshold_method}, "
                       f"h={p.denoise_h}, close={p.morph_close_radius}, "
                       f"open={p.morph_open_radius}, clahe={p.clahe_clip_limit}  ({elapsed:.1f}s)")
+                log(f"##BEST:{s:.4f}")
 
     # ------------------------------------------------------------------
     # Report
@@ -236,6 +241,7 @@ def main() -> None:
     log(f"Best score : {best_score:.2f} (grain_count × coverage, capped at 0.90)")
     if best_params is None:
         log("No valid params found.")
+        log("##DONE")
         return
 
     import dataclasses
@@ -250,6 +256,7 @@ def main() -> None:
     with out_path.open("w") as f:
         json.dump(best_dict, f, indent=2)
     log(f"Saved best params → {out_path}")
+    log("##DONE")
 
     # Pretty-print key params
     log(f"\nKey params:")
