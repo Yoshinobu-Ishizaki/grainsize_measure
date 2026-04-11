@@ -104,6 +104,10 @@ class _ScaleDetectionWorker(QObject):
 class _ImageProcessTab(QWidget):
     """Tab 0: image processing parameters."""
 
+    open_image_requested = pyqtSignal()
+    open_params_requested = pyqtSignal()
+    image_process_requested = pyqtSignal()
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         scroll = QScrollArea(self)
@@ -117,6 +121,20 @@ class _ImageProcessTab(QWidget):
         layout = QVBoxLayout(container)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
+
+        # --- Open / process buttons ---
+        btn_row = QHBoxLayout()
+        btn_open = QPushButton("画像を開く")
+        btn_open.clicked.connect(self.open_image_requested)
+        btn_open_params = QPushButton("パラメータを開く")
+        btn_open_params.clicked.connect(self.open_params_requested)
+        self.btn_process = QPushButton("画像処理を実行")
+        self.btn_process.setEnabled(False)
+        self.btn_process.clicked.connect(self.image_process_requested)
+        btn_row.addWidget(btn_open)
+        btn_row.addWidget(btn_open_params)
+        btn_row.addWidget(self.btn_process)
+        layout.addLayout(btn_row)
 
         # --- Segmentation ---
         grp_seg = QGroupBox("セグメンテーション (GSAT)")
@@ -237,6 +255,7 @@ class _GrainCalcTab(QWidget):
     auto_detect_requested = pyqtSignal()
     select_grain_roi_requested = pyqtSignal()
     select_marker_roi_requested = pyqtSignal()
+    grain_calc_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -399,6 +418,12 @@ class _GrainCalcTab(QWidget):
 
         self.chk_exclude_edge.toggled.connect(self.spin_edge_buffer.setEnabled)
         layout.addWidget(grp_grain)
+
+        # --- Grain calc button ---
+        self.btn_grain_calc = QPushButton("粒子計算を実行")
+        self.btn_grain_calc.setEnabled(False)
+        self.btn_grain_calc.clicked.connect(self.grain_calc_requested)
+        layout.addWidget(self.btn_grain_calc)
 
         layout.addStretch()
 
@@ -633,7 +658,7 @@ class SettingsDialog(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("結晶粒サイズ測定 v0.4.0")
+        self.setWindowTitle("結晶粒サイズ測定 v0.5.0")
         self.setMinimumWidth(380)
 
         self._analyzer = GrainAnalyzer()
@@ -647,10 +672,12 @@ class SettingsDialog(QMainWindow):
         self._image_loaded = False
         self._image_processed = False
         self._calc_done = False
+        self._image_stem: str = ""
+        self._original_rgb: np.ndarray | None = None
+        self._scale_bar_result = None
 
         self._build_viewer()
         self._build_menu()
-        self._build_toolbar()
         self._build_tabs()
         self._build_status_bar()
 
@@ -691,20 +718,6 @@ class SettingsDialog(QMainWindow):
         self._act_export_csv = proc_menu.addAction("CSVエクスポート...")
         self._act_export_csv.triggered.connect(self._export_grain_csv)
 
-    def _build_toolbar(self) -> None:
-        tb = self.addToolBar("メイン")
-        tb.setMovable(False)
-
-        tb.addAction("画像を開く", self._open_image)
-        tb.addAction("パラメータを開く", self._open_params)
-        tb.addSeparator()
-        self._tb_process = tb.addAction("画像処理", self._image_process)
-        self._tb_calc = tb.addAction("粒子計算", self._grain_calc)
-        tb.addSeparator()
-        tb.addAction("画像を保存", self._save_image)
-        tb.addAction("パラメータを保存", self._save_params)
-        tb.addAction("CSVエクスポート", self._export_grain_csv)
-
     def _build_tabs(self) -> None:
         self._tab_widget = QTabWidget()
         self.setCentralWidget(self._tab_widget)
@@ -718,6 +731,10 @@ class SettingsDialog(QMainWindow):
         self._tab_widget.addTab(self._tab_save, "保存・出力")
 
         # Connect tab signals
+        self._tab_process.open_image_requested.connect(self._open_image)
+        self._tab_process.open_params_requested.connect(self._open_params)
+        self._tab_process.image_process_requested.connect(self._image_process)
+        self._tab_calc.grain_calc_requested.connect(self._grain_calc)
         self._tab_calc.auto_detect_requested.connect(self._run_scale_detection)
         self._tab_calc.select_grain_roi_requested.connect(
             lambda: self._viewer.set_grain_roi_mode(True)
@@ -747,13 +764,13 @@ class SettingsDialog(QMainWindow):
     # ------------------------------------------------------------------
 
     def _update_button_states(self) -> None:
-        self._tb_process.setEnabled(self._image_loaded)
+        self._tab_process.btn_process.setEnabled(self._image_loaded)
         self._act_image_process.setEnabled(self._image_loaded)
 
         self._tab_calc.btn_auto_detect.setEnabled(self._image_loaded)
         self._tab_calc.btn_select_grain_roi.setEnabled(self._image_loaded)
         self._tab_calc.btn_select_marker_roi.setEnabled(self._image_loaded)
-        self._tb_calc.setEnabled(self._image_processed)
+        self._tab_calc.btn_grain_calc.setEnabled(self._image_processed)
         self._act_grain_calc.setEnabled(self._image_processed)
 
         self._tab_save.set_export_enabled(self._calc_done)
@@ -781,6 +798,9 @@ class SettingsDialog(QMainWindow):
             return
 
         original_rgb = cv2.cvtColor(self._analyzer.original_image, cv2.COLOR_BGR2RGB)
+        self._original_rgb = original_rgb
+        self._scale_bar_result = None
+        self._image_stem = Path(path).stem
         self._viewer.show_original(original_rgb)
         self._viewer.clear_processed()
         self._tab_save.reset()
@@ -827,8 +847,9 @@ class SettingsDialog(QMainWindow):
         self.statusBar().showMessage(f"パラメータを読み込みました: {Path(path).name}", 3000)
 
     def _save_params(self) -> None:
+        default_name = f"{self._image_stem}_params.json" if self._image_stem else "params.json"
         path, _ = QFileDialog.getSaveFileName(
-            self, "パラメータを保存", "params.json", "JSON ファイル (*.json);;すべてのファイル (*)"
+            self, "パラメータを保存", default_name, "JSON ファイル (*.json);;すべてのファイル (*)"
         )
         if not path:
             return
@@ -982,6 +1003,25 @@ class SettingsDialog(QMainWindow):
         self._scale_thread = None
         self._scale_worker = None
 
+    def _refresh_original_with_scale_bar(self) -> None:
+        if self._original_rgb is None:
+            return
+        img = self._original_rgb.copy()
+        if self._scale_bar_result is not None:
+            r = self._scale_bar_result
+            # Coordinates from the worker are relative to the cropped marker_roi region;
+            # add the roi offset to map back to full-image coordinates.
+            x_off, y_off = 0, 0
+            marker_roi = self._tab_calc._read_marker_roi()
+            if marker_roi:
+                x_off, y_off = marker_roi[0], marker_roi[1]
+            x1 = r.bar_x1 + x_off
+            x2 = r.bar_x2 + x_off
+            y  = r.bar_y  + y_off
+            cv2.line(img, (x1, y), (x2, y), (255, 80, 0), 3)
+            cv2.line(img, (x1, y - 4), (x2, y - 4), (255, 80, 0), 3)
+        self._viewer.show_original(img)
+
     def _on_scale_done(self, result) -> None:
         self._tab_calc.btn_auto_detect.setEnabled(True)
         if result.pixels_per_um is not None:
@@ -991,6 +1031,8 @@ class SettingsDialog(QMainWindow):
                 f" → {result.pixels_per_um:.3f} px/µm"
             )
             self._tab_calc.set_scale_from_detection(result.pixels_per_um, status)
+            self._scale_bar_result = result
+            self._refresh_original_with_scale_bar()
             self.statusBar().showMessage(f"スケール自動検出: {result.pixels_per_um:.3f} px/µm", 5000)
         else:
             self._prompt_physical_dimension(result)
@@ -1029,6 +1071,8 @@ class SettingsDialog(QMainWindow):
                 f" → {ppu:.3f} px/µm"
             )
             self._tab_calc.set_scale_from_detection(ppu, status)
+            self._scale_bar_result = result
+            self._refresh_original_with_scale_bar()
             self.statusBar().showMessage(f"スケール設定: {ppu:.3f} px/µm", 5000)
         else:
             self._tab_calc.set_scale_status("キャンセルされました")
@@ -1038,8 +1082,9 @@ class SettingsDialog(QMainWindow):
     # ------------------------------------------------------------------
 
     def _save_image(self) -> None:
+        default_name = f"{self._image_stem}_overlay.png" if self._image_stem else "grain_overlay.png"
         path, _ = QFileDialog.getSaveFileName(
-            self, "画像を保存", "grain_overlay.png",
+            self, "画像を保存", default_name,
             "PNG ファイル (*.png);;JPEG ファイル (*.jpg);;すべてのファイル (*)",
         )
         if not path:
@@ -1051,8 +1096,9 @@ class SettingsDialog(QMainWindow):
             QMessageBox.critical(self, "エラー", str(exc))
 
     def _export_chord_csv(self) -> None:
+        default_name = f"{self._image_stem}_chord.csv" if self._image_stem else "chord_lengths.csv"
         path, _ = QFileDialog.getSaveFileName(
-            self, "コード長CSVを保存", "chord_lengths.csv",
+            self, "コード長CSVを保存", default_name,
             "CSV ファイル (*.csv);;すべてのファイル (*)",
         )
         if not path:
@@ -1064,8 +1110,9 @@ class SettingsDialog(QMainWindow):
             QMessageBox.critical(self, "エラー", str(exc))
 
     def _export_grain_csv(self) -> None:
+        default_name = f"{self._image_stem}_grain.csv" if self._image_stem else "grain_areas.csv"
         path, _ = QFileDialog.getSaveFileName(
-            self, "粒子面積CSVを保存", "grain_areas.csv",
+            self, "粒子面積CSVを保存", default_name,
             "CSV ファイル (*.csv);;すべてのファイル (*)",
         )
         if not path:

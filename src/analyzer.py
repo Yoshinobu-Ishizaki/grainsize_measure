@@ -366,16 +366,35 @@ class GrainAnalyzer:
             "std_diam_px": _f(diams.std()),
         }
 
+    _GRAIN_PALETTE = [
+        [220,  80,  80],   # red
+        [ 80, 160, 220],   # blue
+        [ 80, 200,  80],   # green
+        [220, 180,  60],   # yellow-orange
+        [160,  80, 220],   # purple
+    ]
+
     def render_overlay_image(self) -> np.ndarray:
-        """Original image + green grain boundaries + cyan line grid scan lines."""
+        """Original image + per-grain colors + white boundaries + cyan scan lines."""
         if self.original_image is None or self.binary_image is None:
             raise RuntimeError("解析が完了していません。")
 
         overlay = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB).copy()
 
-        # Draw GSAT binary boundaries in green
+        # Color each grain region with one of 5 palette colors (50% blend)
+        if self.labeled_grains is not None:
+            for label_id in np.unique(self.labeled_grains):
+                if label_id == 0:
+                    continue  # background
+                color = np.array(self._GRAIN_PALETTE[(label_id - 1) % len(self._GRAIN_PALETTE)], dtype=np.float32)
+                mask = self.labeled_grains == label_id
+                overlay[mask] = (
+                    overlay[mask].astype(np.float32) * 0.5 + color * 0.5
+                ).astype(np.uint8)
+
+        # Draw boundaries in white on top
         boundary_mask = self.binary_image > 0
-        overlay[boundary_mask] = [0, 220, 0]
+        overlay[boundary_mask] = [255, 255, 255]
 
         # Draw horizontal line scan positions (at theta=0 for visual reference)
         if self.params is not None:
