@@ -214,7 +214,14 @@ def main() -> None:
     total = args.phase2_samples * len(top2_combos)
     iteration = 0
 
+    EARLY_STOP_STREAK = 5
+    EARLY_STOP_MIN_IMPROVEMENT = 0.01  # 1%
+    no_improve_streak = 0
+    stopped_early = False
+
     for base_combo in top2_combos:
+        if stopped_early:
+            break
         base_for_phase2 = dict_to_params(base_params_no_roi, base_combo)
         for _ in range(args.phase2_samples):
             iteration += 1
@@ -224,6 +231,10 @@ def main() -> None:
             if p.threshold_method == "adaptive_threshold" and p.adaptive_block_size % 2 == 0:
                 p.adaptive_block_size += 1
             s = score_params(analyzer, p)
+            if s >= best_score * (1 + EARLY_STOP_MIN_IMPROVEMENT):
+                no_improve_streak = 0
+            else:
+                no_improve_streak += 1
             if s > best_score:
                 best_score = s
                 best_params = p
@@ -233,6 +244,10 @@ def main() -> None:
                       f"h={p.denoise_h}, close={p.morph_close_radius}, "
                       f"open={p.morph_open_radius}, clahe={p.clahe_clip_limit}  ({elapsed:.1f}s)")
                 log(f"##BEST:{s:.4f}")
+            if no_improve_streak >= EARLY_STOP_STREAK:
+                log(f"  Early stop: no ≥1% improvement for {EARLY_STOP_STREAK} consecutive iterations.")
+                stopped_early = True
+                break
 
     # ------------------------------------------------------------------
     # Report
