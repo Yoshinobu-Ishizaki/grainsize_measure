@@ -19,7 +19,7 @@ The image below shows the result with the optimized baseline parameters for `c26
 The segmentation section converts a grayscale image into a binary boundary image through a fixed sequence of steps:
 
 ```
-Invert → Denoise → Sharpen → Threshold → Morphological ops → Remove small features
+Invert → [CLAHE] → Denoise → Sharpen → Threshold → Morphological ops → Remove small features
 ```
 
 ---
@@ -34,6 +34,30 @@ Invert → Denoise → Sharpen → Threshold → Morphological ops → Remove sm
 ![invert_grayscale](images/invert_grayscale.png)
 
 **Effect:** Inverting before thresholding ensures that the boundary pixels become white (255) in the binary image. Getting this wrong will produce a completely filled or completely empty result.
+
+---
+
+### 1.1b CLAHE Preprocessing (`clahe_clip_limit`, `clahe_tile_size`)
+
+| Setting | Value |
+|---|---|
+| Default clip limit | **0.0** (disabled) |
+| Range | 0.0 – 20.0 |
+| Default tile size | **8** |
+| Algorithm | Contrast Limited Adaptive Histogram Equalization |
+
+**What it does:** CLAHE redistributes local contrast across the image in small independent tiles. Unlike global histogram equalization, it enhances faint boundaries in low-contrast regions without washing out well-contrasted boundaries elsewhere.
+
+**When to use:** Enable when some grain interiors have similar brightness to their boundaries — "gray-area grains" that look like grains to the human eye but are not detected. This is common in optical micrographs of brass/copper alloys where different grain orientations produce subtle etching contrast.
+
+- `clahe_clip_limit = 0.0`: Disabled — no CLAHE applied (default).
+- `clahe_clip_limit = 1.0–3.0`: Mild enhancement; recommended starting point for gray-area problems.
+- `clahe_clip_limit = 5.0+`: Aggressive enhancement; may amplify noise, especially in SEM images.
+- `clahe_tile_size`: Size of each equalization tile in pixels. Smaller values (4–8) give finer local normalization; larger values (16–32) are smoother. Choose a tile size roughly equal to the typical grain diameter.
+
+**Applied after:** Grayscale inversion. **Applied before:** Denoising.
+
+**Tip:** Run `optimize_params.py` with `clahe_clip_limit` in the search space to find the best value automatically for your sample.
 
 ---
 

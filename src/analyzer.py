@@ -35,6 +35,8 @@ class AnalysisParams:
     min_feature_size: int = 50
     max_hole_size: int = 10
     skeletonize: bool = False  # apply skeletonization as final segmentation step (e.g. SEM polished)
+    clahe_clip_limit: float = 0.0  # 0.0 = disabled; CLAHE clip limit (typical 1.0–5.0)
+    clahe_tile_size: int = 8       # CLAHE tile grid size (NxN)
 
     # --- Intercept measurement (Track A) ---
     line_spacing: int = 20       # pixels between parallel lines
@@ -52,6 +54,9 @@ class AnalysisParams:
 
     # --- Scale ---
     pixels_per_um: float | None = None
+    scale_bar_x1: int | None = None   # detected bar left edge (full-image coords)
+    scale_bar_x2: int | None = None   # detected bar right edge
+    scale_bar_y: int | None = None    # detected bar center row
 
     # --- ROI regions (pixel coords, None = full image) ---
     grain_roi: tuple[int, int, int, int] | None = None   # (x, y, w, h)
@@ -102,6 +107,14 @@ class GrainAnalyzer:
         # 0. Optionally invert (for optical images where boundaries are dark)
         if p.invert_grayscale:
             img = 255 - img
+
+        # 0a. Optional CLAHE (contrast enhancement for gray-area grains)
+        if p.clahe_clip_limit > 0.0:
+            clahe = cv2.createCLAHE(
+                clipLimit=p.clahe_clip_limit,
+                tileGridSize=(p.clahe_tile_size, p.clahe_tile_size)
+            )
+            img = clahe.apply(img)
 
         # 1. Denoise
         img = sdrv.apply_driver_denoise(

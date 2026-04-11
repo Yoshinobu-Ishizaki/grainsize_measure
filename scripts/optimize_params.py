@@ -52,23 +52,36 @@ MAX_GRAIN_AREA = 20_000
 MIN_SOLIDITY = 0.35   # reject jagged noise fragments
 
 
-def score_params(analyzer: GrainAnalyzer, p: AnalysisParams) -> int:
-    """Run segmentation + grain measurement, return quality score."""
+def score_params(analyzer: GrainAnalyzer, p: AnalysisParams) -> float:
+    """Run segmentation + grain measurement, return coverage-weighted quality score.
+
+    Score = grain_count × coverage_ratio (capped at 0.90).
+    This rewards finding more area as valid grains, not just over-segmenting
+    already-detected regions.
+    """
     try:
         analyzer.run_segmentation(p)
         df = analyzer.measure_grain_areas()
     except Exception:
-        return 0
+        return 0.0
 
     if df is None or len(df) == 0:
-        return 0
+        return 0.0
 
     mask = (
         (df["area_pixels"] >= MIN_GRAIN_AREA)
         & (df["area_pixels"] <= MAX_GRAIN_AREA)
         & (df["solidity"] >= MIN_SOLIDITY)
     )
-    return int(mask.sum())
+    valid = df.filter(mask)
+    grain_count = len(valid)
+    if grain_count == 0:
+        return 0.0
+
+    roi_area = analyzer.gray_image.shape[0] * analyzer.gray_image.shape[1]
+    covered_px = int(valid["area_pixels"].sum())
+    coverage = min(covered_px / roi_area, 0.90)
+    return grain_count * coverage
 
 
 # ---------------------------------------------------------------------------
@@ -83,12 +96,14 @@ SEARCH_SPACE = {
     "sharpen_amount":      [0.1, 0.2, 0.3, 1.0, 2.0],
     "threshold_value":     [80, 100, 128, 150, 180],
     "threshold_high":      [160, 180, 200, 220],
-    "adaptive_block_size": [11, 15, 21, 23, 35, 51],
-    "adaptive_offset":     [-10.0, -5.0, 0.0, 5.0],
+    "adaptive_block_size": [11, 15, 21, 23, 25, 35, 51, 75],
+    "adaptive_offset":     [-10.0, -5.0, 0.0, 5.0, 8.0, 12.0, 15.0],
     "morph_close_radius":  [0, 1, 2, 3],
     "morph_open_radius":   [0, 1, 2],
     "min_feature_size":    [9, 20, 50, 64, 100],
     "max_hole_size":       [4, 10, 25],
+    "clahe_clip_limit":    [0.0, 1.0, 2.0, 3.0, 5.0],
+    "clahe_tile_size":     [8, 16],
 }
 
 
@@ -176,7 +191,7 @@ def main() -> None:
             })
             s = score_params(analyzer, p)
             label = f"invert={inv}, method={method}"
-            log(f"  {label:60s}  score={s}")
+            log(f"  {label:60s}  score={s:.2f}")
             phase1_results.append((s, {"invert_grayscale": inv, "threshold_method": method}))
 
     phase1_results.sort(key=lambda x: x[0], reverse=True)
@@ -209,16 +224,16 @@ def main() -> None:
                 best_score = s
                 best_params = p
                 elapsed = time.time() - t0
-                log(f"  [{iteration:4d}/{total}] New best score={s}  "
+                log(f"  [{iteration:4d}/{total}] New best score={s:.2f}  "
                       f"invert={p.invert_grayscale}, method={p.threshold_method}, "
                       f"h={p.denoise_h}, close={p.morph_close_radius}, "
-                      f"open={p.morph_open_radius}  ({elapsed:.1f}s)")
+                      f"open={p.morph_open_radius}, clahe={p.clahe_clip_limit}  ({elapsed:.1f}s)")
 
     # ------------------------------------------------------------------
     # Report
     # ------------------------------------------------------------------
     log(f"\n=== Result ===")
-    log(f"Best score : {best_score} grains in [{MIN_GRAIN_AREA}, {MAX_GRAIN_AREA}] px, solidity≥{MIN_SOLIDITY}")
+    log(f"Best score : {best_score:.2f} (grain_count × coverage, capped at 0.90)")
     if best_params is None:
         log("No valid params found.")
         return
@@ -238,7 +253,8 @@ def main() -> None:
 
     # Pretty-print key params
     log(f"\nKey params:")
-    for k in ["invert_grayscale", "denoise_h", "sharpen_amount",
+    for k in ["invert_grayscale", "clahe_clip_limit", "clahe_tile_size",
+              "denoise_h", "sharpen_amount",
               "threshold_method", "threshold_value", "threshold_high",
               "adaptive_block_size", "adaptive_offset",
               "morph_close_radius", "morph_open_radius",

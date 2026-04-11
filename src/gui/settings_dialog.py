@@ -127,6 +127,20 @@ class _ImageProcessTab(QWidget):
         self.chk_invert.setChecked(True)
         form_seg.addRow(self.chk_invert)
 
+        self.spin_clahe_clip = QDoubleSpinBox()
+        self.spin_clahe_clip.setRange(0.0, 20.0)
+        self.spin_clahe_clip.setDecimals(1)
+        self.spin_clahe_clip.setSingleStep(0.5)
+        self.spin_clahe_clip.setValue(0.0)
+        self.spin_clahe_clip.setToolTip("0.0 = 無効; グレー領域の粒子検出改善には 1.0–5.0 を推奨")
+        form_seg.addRow("CLAHE クリップ限界:", self.spin_clahe_clip)
+
+        self.spin_clahe_tile = QSpinBox()
+        self.spin_clahe_tile.setRange(2, 64)
+        self.spin_clahe_tile.setValue(8)
+        self.spin_clahe_tile.setToolTip("CLAHEタイルグリッドサイズ (NxN)")
+        form_seg.addRow("CLAHE タイル サイズ:", self.spin_clahe_tile)
+
         self.spin_denoise_h = QDoubleSpinBox()
         self.spin_denoise_h.setRange(0.01, 100.0)
         self.spin_denoise_h.setDecimals(3)
@@ -205,6 +219,8 @@ class _ImageProcessTab(QWidget):
         method_map = {0: "global_threshold", 1: "adaptive_threshold", 2: "hysteresis_threshold"}
         return {
             "invert_grayscale": self.chk_invert.isChecked(),
+            "clahe_clip_limit": self.spin_clahe_clip.value(),
+            "clahe_tile_size": self.spin_clahe_tile.value(),
             "denoise_h": self.spin_denoise_h.value(),
             "denoise_patch": 5,
             "denoise_search": 7,
@@ -225,6 +241,8 @@ class _ImageProcessTab(QWidget):
     def set_processing_params(self, data: dict) -> None:
         method_map = {"global_threshold": 0, "adaptive_threshold": 1, "hysteresis_threshold": 2}
         self.chk_invert.setChecked(bool(data.get("invert_grayscale", True)))
+        self.spin_clahe_clip.setValue(float(data.get("clahe_clip_limit", 0.0)))
+        self.spin_clahe_tile.setValue(int(data.get("clahe_tile_size", 8)))
         self.spin_denoise_h.setValue(float(data.get("denoise_h", 0.04)))
         self.spin_sharpen_radius.setValue(int(data.get("sharpen_radius", 2)))
         self.spin_sharpen_amount.setValue(float(data.get("sharpen_amount", 0.3)))
@@ -635,6 +653,7 @@ class SettingsDialog(QMainWindow):
         self._calc_done = False
         self._image_stem: str = ""
         self._original_rgb: np.ndarray | None = None
+        self._processed_binary_rgb: np.ndarray | None = None
         self._scale_bar_result = None
 
         self._build_viewer()
@@ -659,6 +678,9 @@ class SettingsDialog(QMainWindow):
         """
         avail = QApplication.primaryScreen().availableGeometry()
         self.move(avail.left(), avail.top())
+        # Resize to show all controls without scrolling; clamp to available height
+        target_h = min(950, avail.height())
+        self.resize(self.minimumWidth(), target_h)
         # Frame width ≈ minimumWidth + WM decoration (~28 px observed)
         viewer_x = avail.left() + self.minimumWidth() + 28 + 10
         self._viewer.move(viewer_x, avail.top())
@@ -771,6 +793,7 @@ class SettingsDialog(QMainWindow):
 
         original_rgb = cv2.cvtColor(self._analyzer.original_image, cv2.COLOR_BGR2RGB)
         self._original_rgb = original_rgb
+        self._processed_binary_rgb = None
         self._scale_bar_result = None
         self._image_stem = Path(path).stem
         self._viewer.show_original(original_rgb)
@@ -809,12 +832,37 @@ class SettingsDialog(QMainWindow):
         self._viewer.set_grain_roi(tuple(grain_roi) if grain_roi else None)  # type: ignore[arg-type]
         self._viewer.set_marker_roi(tuple(marker_roi) if marker_roi else None)  # type: ignore[arg-type]
 
+        # Extract scale bar coords BEFORE _load_image_path() clears _scale_bar_result
+        saved_x1 = data.get("scale_bar_x1")
+        saved_x2 = data.get("scale_bar_x2")
+        saved_y  = data.get("scale_bar_y")
+
         image_path = data.get("image_path")
         if image_path:
             try:
                 self._load_image_path(image_path)
             except Exception as exc:
                 QMessageBox.warning(self, "画像読み込み失敗", f"{image_path}\n\n{exc}")
+
+        # Restore scale bar result AFTER image load (which clears _scale_bar_result)
+        if saved_x1 is not None and saved_x2 is not None and saved_y is not None:
+            from scale_detector import ScaleBarResult  # noqa: PLC0415
+            x_off, y_off = (marker_roi[0], marker_roi[1]) if marker_roi else (0, 0)
+            self._scale_bar_result = ScaleBarResult(
+                bar_x1=int(saved_x1) - x_off,
+                bar_x2=int(saved_x2) - x_off,
+                bar_y=int(saved_y) - y_off,
+                bar_length_px=int(saved_x2) - int(saved_x1),
+                strip_start_row=0,
+                physical_value=None,
+                unit=None,
+                pixels_per_um=None,
+                ocr_text_raw=None,
+                confidence="bar_only",
+            )
+            self._refresh_original_with_scale_bar()
+            # Clear the marker ROI overlay so the red scale bar line is visible
+            self._viewer.set_marker_roi(None)
 
         self.statusBar().showMessage(f"パラメータを読み込みました: {Path(path).name}", 3000)
 
@@ -832,6 +880,18 @@ class SettingsDialog(QMainWindow):
         data["image_path"] = (
             str(self._analyzer.image_path) if self._analyzer.image_path else None
         )
+        # Persist scale bar position so it can be restored without re-running detection
+        if self._scale_bar_result is not None:
+            r = self._scale_bar_result
+            marker_roi = self._tab_calc._read_marker_roi()
+            x_off, y_off = (marker_roi[0], marker_roi[1]) if marker_roi else (0, 0)
+            data["scale_bar_x1"] = r.bar_x1 + x_off
+            data["scale_bar_x2"] = r.bar_x2 + x_off
+            data["scale_bar_y"] = r.bar_y + y_off
+        else:
+            data["scale_bar_x1"] = None
+            data["scale_bar_x2"] = None
+            data["scale_bar_y"] = None
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
@@ -882,7 +942,9 @@ class SettingsDialog(QMainWindow):
     def _on_image_process_done(self, binary: np.ndarray) -> None:
         # Convert binary (0/255) to RGB for display
         binary_rgb = cv2.cvtColor(binary, cv2.COLOR_GRAY2RGB)
-        self._viewer.show_processed(binary_rgb)
+        self._processed_binary_rgb = binary_rgb
+        self._refresh_original_with_scale_bar()
+        self._refresh_processed_with_scale_bar()
 
         self._image_processed = True
         self._calc_done = False
@@ -975,24 +1037,51 @@ class SettingsDialog(QMainWindow):
         self._scale_thread = None
         self._scale_worker = None
 
+    def _scale_bar_draw_coords(self) -> tuple[int, int, int, int] | None:
+        """Return (x1, x2, y, strip_start) in full-image coords, or None if no result."""
+        if self._scale_bar_result is None:
+            return None
+        r = self._scale_bar_result
+        x_off, y_off = 0, 0
+        marker_roi = self._tab_calc._read_marker_roi()
+        if marker_roi:
+            x_off, y_off = marker_roi[0], marker_roi[1]
+        x1 = r.bar_x1 + x_off
+        x2 = r.bar_x2 + x_off
+        y  = r.bar_y  + y_off
+        if marker_roi:
+            strip_start = y_off
+        elif r.strip_start_row > 0:
+            strip_start = r.strip_start_row
+        else:
+            strip_start = max(0, y - 5)
+        return x1, x2, y, strip_start
+
+    def _apply_scale_bar_to_image(self, img: np.ndarray) -> np.ndarray:
+        """Blank the scale bar strip and draw the red line onto img (in-place copy)."""
+        coords = self._scale_bar_draw_coords()
+        if coords is None:
+            return img
+        x1, x2, y, strip_start = coords
+        img = img.copy()
+        img[strip_start:, :] = 0
+        cv2.line(img, (x1, y), (x2, y), (255, 0, 0), 3)
+        cv2.line(img, (x1, y - 4), (x2, y - 4), (255, 0, 0), 3)
+        return img
+
     def _refresh_original_with_scale_bar(self) -> None:
+        """Show original image with scale bar strip blanked + red line."""
         if self._original_rgb is None:
             return
-        img = self._original_rgb.copy()
-        if self._scale_bar_result is not None:
-            r = self._scale_bar_result
-            # Coordinates from the worker are relative to the cropped marker_roi region;
-            # add the roi offset to map back to full-image coordinates.
-            x_off, y_off = 0, 0
-            marker_roi = self._tab_calc._read_marker_roi()
-            if marker_roi:
-                x_off, y_off = marker_roi[0], marker_roi[1]
-            x1 = r.bar_x1 + x_off
-            x2 = r.bar_x2 + x_off
-            y  = r.bar_y  + y_off
-            cv2.line(img, (x1, y), (x2, y), (255, 80, 0), 3)
-            cv2.line(img, (x1, y - 4), (x2, y - 4), (255, 80, 0), 3)
+        img = self._apply_scale_bar_to_image(self._original_rgb)
         self._viewer.show_original(img)
+
+    def _refresh_processed_with_scale_bar(self) -> None:
+        """Show processed binary with scale bar strip blanked + red line."""
+        if self._processed_binary_rgb is None:
+            return
+        img = self._apply_scale_bar_to_image(self._processed_binary_rgb)
+        self._viewer.show_processed(img)
 
     def _on_scale_done(self, result) -> None:
         self._tab_calc.btn_auto_detect.setEnabled(True)
@@ -1005,6 +1094,8 @@ class SettingsDialog(QMainWindow):
             self._tab_calc.set_scale_from_detection(result.pixels_per_um, status)
             self._scale_bar_result = result
             self._refresh_original_with_scale_bar()
+            self._refresh_processed_with_scale_bar()
+            self._viewer.set_marker_roi(None)  # Clear overlay so scale bar line is visible
             self.statusBar().showMessage(f"スケール自動検出: {result.pixels_per_um:.3f} px/µm", 5000)
         else:
             self._prompt_physical_dimension(result)
@@ -1045,6 +1136,8 @@ class SettingsDialog(QMainWindow):
             self._tab_calc.set_scale_from_detection(ppu, status)
             self._scale_bar_result = result
             self._refresh_original_with_scale_bar()
+            self._refresh_processed_with_scale_bar()
+            self._viewer.set_marker_roi(None)  # Clear overlay so scale bar line is visible
             self.statusBar().showMessage(f"スケール設定: {ppu:.3f} px/µm", 5000)
         else:
             self._tab_calc.set_scale_status("キャンセルされました")
