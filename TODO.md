@@ -1,13 +1,10 @@
-- image processing button is doubled at top and bottom of dialog. remove bottom one.
-- auto detect scale ratio does not work with scale bar region .
-- The viewer window should show 3 state, original/processed/grain overlay.
+## Instruction
 
+Create detailed insruction document which explains how to set each parameters for better grain size detection results.
 
----
+It is preferable if you can create a markdown document which shows the original image and result of processing for each parameters. It will help user to understand what parameter can cause an effect.
 
-## Not for app development
+## Improvements2
 
-Pls use original GSAT functions to find good params for images in @params.json. 
-The good param combination which maximize grain detection for that image. 
-Do not forget that part of this image is grain area. 
-Write back the best result into new json file.
+- Default parameters should be more realistic. Use settings for @tests/sample/grains_steel_highlighted.tif
+

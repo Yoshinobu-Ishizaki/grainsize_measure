@@ -54,6 +54,7 @@ class ViewerWindow(QMainWindow):
 
     def show_original(self, rgb: np.ndarray) -> None:
         self._viewer_original.set_image(rgb)
+        self._tabs.setCurrentIndex(0)
 
     def show_processed(self, rgb: np.ndarray) -> None:
         self._viewer_processed.set_image(rgb)

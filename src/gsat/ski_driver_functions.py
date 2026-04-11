@@ -1347,19 +1347,19 @@ def apply_driver_morph(img_in, fltr_params_in, quiet_in=False):
             print(f"    Operation type: 'binary_closing'")
 
     elif operation_type == 1:
-        img_temp = morph.binary_opening(img_0, footprint=temp_footprint)
+        img_temp = morph.opening(img_0, footprint=temp_footprint)
 
         if not quiet:
             print(f"    Operation type: 'binary_opening'")
 
     elif operation_type == 2:
-        img_temp = morph.binary_dilation(img_0, footprint=temp_footprint)
+        img_temp = morph.dilation(img_0, footprint=temp_footprint)
 
         if not quiet:
             print(f"    Operation type: 'binary_dilation'")
 
     else: # operation_type == 3
-        img_temp = morph.binary_erosion(img_0, footprint=temp_footprint)
+        img_temp = morph.erosion(img_0, footprint=temp_footprint)
 
         if not quiet:
             print(f"    Operation type: 'binary_erosion'")
@@ -1477,19 +1477,19 @@ def apply_driver_morph_3d(img_in, fltr_params_in, quiet_in=False):
             print(f"    Operation type: 'binary_closing'")
 
     elif operation_type == 1:
-        img_temp = morph.binary_opening(img_0, footprint=temp_footprint)
+        img_temp = morph.opening(img_0, footprint=temp_footprint)
 
         if not quiet:
             print(f"    Operation type: 'binary_opening'")
 
     elif operation_type == 2:
-        img_temp = morph.binary_dilation(img_0, footprint=temp_footprint)
+        img_temp = morph.dilation(img_0, footprint=temp_footprint)
 
         if not quiet:
             print(f"    Operation type: 'binary_dilation'")
 
     else: # operation_type == 3
-        img_temp = morph.binary_erosion(img_0, footprint=temp_footprint)
+        img_temp = morph.erosion(img_0, footprint=temp_footprint)
 
         if not quiet:
             print(f"    Operation type: 'binary_erosion'")

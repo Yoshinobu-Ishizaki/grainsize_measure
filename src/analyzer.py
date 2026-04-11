@@ -381,12 +381,11 @@ class GrainAnalyzer:
 
         overlay = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB).copy()
 
-        # Color each grain region with one of 5 palette colors (50% blend)
-        if self.labeled_grains is not None:
-            for label_id in np.unique(self.labeled_grains):
-                if label_id == 0:
-                    continue  # background
-                color = np.array(self._GRAIN_PALETTE[(label_id - 1) % len(self._GRAIN_PALETTE)], dtype=np.float32)
+        # Color only accepted grains (those in grain_df, i.e. within grain_roi and filters)
+        if self.labeled_grains is not None and self.grain_df is not None:
+            accepted_ids = set(self.grain_df["grain_id"].to_list())
+            for i, label_id in enumerate(sorted(accepted_ids)):
+                color = np.array(self._GRAIN_PALETTE[i % len(self._GRAIN_PALETTE)], dtype=np.float32)
                 mask = self.labeled_grains == label_id
                 overlay[mask] = (
                     overlay[mask].astype(np.float32) * 0.5 + color * 0.5
