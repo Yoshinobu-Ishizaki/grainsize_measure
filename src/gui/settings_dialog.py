@@ -184,6 +184,10 @@ class _ImageProcessTab(QWidget):
         self.spin_min_feature.setValue(64)
         form_seg.addRow("最小フィーチャ (px²):", self.spin_min_feature)
 
+        self.chk_skeletonize = QCheckBox("スケルトン化 (SEMポリッシュ画像向け)")
+        self.chk_skeletonize.setChecked(False)
+        form_seg.addRow(self.chk_skeletonize)
+
         layout.addWidget(grp_seg)
 
         layout.addStretch()
@@ -214,6 +218,7 @@ class _ImageProcessTab(QWidget):
             "morph_open_radius": self.spin_morph_open.value(),
             "min_feature_size": self.spin_min_feature.value(),
             "max_hole_size": 10,
+            "skeletonize": self.chk_skeletonize.isChecked(),
         }
 
     def set_processing_params(self, data: dict) -> None:
@@ -230,6 +235,7 @@ class _ImageProcessTab(QWidget):
         self.spin_morph_close.setValue(int(data.get("morph_close_radius", 1)))
         self.spin_morph_open.setValue(int(data.get("morph_open_radius", 0)))
         self.spin_min_feature.setValue(int(data.get("min_feature_size", 64)))
+        self.chk_skeletonize.setChecked(bool(data.get("skeletonize", False)))
 
 
 class _GrainCalcTab(QWidget):

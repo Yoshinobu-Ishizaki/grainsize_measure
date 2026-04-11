@@ -1,5 +1,5 @@
 {
-  "image_path": "/home/yoshinobu/develop/grainsize_measure/tests/sample/grains_steel_highlighted.tif",
+  "image_path": "tests/sample/grains_steel_highlighted.tif",
   "pixels_per_um": null,
   "invert_grayscale": true,
   "denoise_h": 0.04,
@@ -26,5 +26,7 @@
   "pad_for_rotation": true,
   "min_grain_area": 50,
   "exclude_edge_grains": true,
-  "edge_buffer": 5
+  "edge_buffer": 5,
+  "grain_roi": null,
+  "marker_roi": null
 }

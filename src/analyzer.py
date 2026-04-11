@@ -35,6 +35,7 @@ class AnalysisParams:
     morph_open_radius: int = 2
     min_feature_size: int = 50
     max_hole_size: int = 10
+    skeletonize: bool = False  # apply skeletonization as final segmentation step (e.g. SEM polished)
 
     # --- Intercept measurement (Track A) ---
     line_spacing: int = 20       # pixels between parallel lines
@@ -140,6 +141,12 @@ class GrainAnalyzer:
         img = sdrv.apply_driver_del_features(
             img, ["scikit", p.max_hole_size, p.min_feature_size], quiet_in=True
         )
+
+        # 7. Optional skeletonization (e.g. for SEM polished samples)
+        if p.skeletonize:
+            from skimage.morphology import skeletonize as ski_skeletonize
+            from skimage.util import img_as_bool, img_as_ubyte as _ubyte
+            img = _ubyte(ski_skeletonize(img_as_bool(img)))
 
         self.binary_image = img
 
