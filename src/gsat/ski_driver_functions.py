@@ -247,8 +247,8 @@ def apply_driver_del_features(img_in, fltr_params_in, quiet_in=False):
         min_feat_sz = fltr_params[2]
 
         img_bool = img_as_bool(img)
-        img_temp = morph.remove_small_holes(img_bool, max_hole_sz, connectivity=1)
-        img_fltr = morph.remove_small_objects(img_temp, min_feat_sz, connectivity=1)
+        img_temp = morph.remove_small_holes(img_bool, max_size=max_hole_sz, connectivity=1)
+        img_fltr = morph.remove_small_objects(img_temp, max_size=min_feat_sz, connectivity=1)
         img_fltr = img_as_ubyte(img_fltr)
 
         if not quiet:
@@ -1341,7 +1341,7 @@ def apply_driver_morph(img_in, fltr_params_in, quiet_in=False):
             print(f"    Footprint radius (pixels): {n_radius}")
 
     if operation_type == 0:
-        img_temp = morph.binary_closing(img_0, footprint=temp_footprint)
+        img_temp = morph.closing(img_0, footprint=temp_footprint)
 
         if not quiet:
             print(f"    Operation type: 'binary_closing'")
@@ -1471,7 +1471,7 @@ def apply_driver_morph_3d(img_in, fltr_params_in, quiet_in=False):
             print(f"    Footprint radius (pixels): {n_radius}")
 
     if operation_type == 0:
-        img_temp = morph.binary_closing(img_0, footprint=temp_footprint)
+        img_temp = morph.closing(img_0, footprint=temp_footprint)
 
         if not quiet:
             print(f"    Operation type: 'binary_closing'")

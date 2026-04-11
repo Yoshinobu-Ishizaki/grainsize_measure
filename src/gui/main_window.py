@@ -155,7 +155,7 @@ class MainWindow(QMainWindow):
         original_rgb = cv2.cvtColor(self._analyzer.original_image, cv2.COLOR_BGR2RGB)
         self._canvas_original.show_image(original_rgb, title=Path(path).name)
         gray_rgb = cv2.cvtColor(self._analyzer.gray_image, cv2.COLOR_GRAY2RGB)
-        self._canvas_gray.show_image(gray_rgb, title=f"{Path(path).name} (グレースケール)")
+        self._canvas_gray.show_image(gray_rgb, title=f"{Path(path).name} (Grayscale)")
         self._canvas_overlay.clear()
         self._results.reset()
         self._settings.set_run_enabled(True)
@@ -196,7 +196,7 @@ class MainWindow(QMainWindow):
         self._worker = None
 
     def _on_analysis_done(self, chord_df, grain_df, overlay: np.ndarray) -> None:
-        self._canvas_overlay.show_image(overlay, title="粒子 Overlay")
+        self._canvas_overlay.show_image(overlay, title="Grain Overlay")
         self._tabs.setCurrentIndex(2)
 
         ppu = self._settings.get_params().pixels_per_um
@@ -329,7 +329,7 @@ class MainWindow(QMainWindow):
                 original_rgb = cv2.cvtColor(self._analyzer.original_image, cv2.COLOR_BGR2RGB)
                 self._canvas_original.show_image(original_rgb, title=Path(image_path).name)
                 gray_rgb = cv2.cvtColor(self._analyzer.gray_image, cv2.COLOR_GRAY2RGB)
-                self._canvas_gray.show_image(gray_rgb, title=f"{Path(image_path).name} (グレースケール)")
+                self._canvas_gray.show_image(gray_rgb, title=f"{Path(image_path).name} (Grayscale)")
                 self._canvas_overlay.clear()
                 self._results.reset()
                 self._settings.set_run_enabled(True)
