@@ -1,0 +1,41 @@
+{
+  "denoise_h": 0.5,
+  "denoise_patch": 7,
+  "denoise_search": 21,
+  "sharpen_radius": 3,
+  "sharpen_amount": 0.2,
+  "invert_grayscale": true,
+  "threshold_method": "adaptive_threshold",
+  "threshold_value": 150,
+  "threshold_high": 160,
+  "adaptive_block_size": 15,
+  "adaptive_offset": 0.0,
+  "morph_close_radius": 0,
+  "morph_open_radius": 1,
+  "min_feature_size": 9,
+  "max_hole_size": 25,
+  "line_spacing": 20,
+  "row_scan_start": 0,
+  "theta_start": 0.0,
+  "theta_end": 135.0,
+  "n_theta_steps": 4,
+  "reskeletonize": false,
+  "pad_for_rotation": false,
+  "min_grain_area": 50,
+  "exclude_edge_grains": true,
+  "edge_buffer": 5,
+  "pixels_per_um": 1.0,
+  "grain_roi": [
+    0,
+    22,
+    723,
+    304
+  ],
+  "marker_roi": [
+    581,
+    399,
+    133,
+    18
+  ],
+  "image_path": "/home/yoshinobu/develop/grainsize_measure/tests/sample/c2600p_asis.png"
+}
