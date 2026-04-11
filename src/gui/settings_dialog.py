@@ -697,6 +697,8 @@ class SettingsDialog(QMainWindow):
         self._act_export_chord_csv.triggered.connect(self._export_chord_csv)
         self._act_export_grain_csv = proc_menu.addAction("粒子面積 CSV エクスポート...")
         self._act_export_grain_csv.triggered.connect(self._export_grain_csv)
+        self._act_export_result_csv = proc_menu.addAction("結果サマリー CSV エクスポート...")
+        self._act_export_result_csv.triggered.connect(self._export_result_csv)
 
     def _build_tabs(self) -> None:
         self._tab_widget = QTabWidget()
@@ -745,6 +747,7 @@ class SettingsDialog(QMainWindow):
         self._act_save_image.setEnabled(self._calc_done)
         self._act_export_chord_csv.setEnabled(self._calc_done)
         self._act_export_grain_csv.setEnabled(self._calc_done)
+        self._act_export_result_csv.setEnabled(self._calc_done)
 
     # ------------------------------------------------------------------
     # File actions
@@ -1089,6 +1092,20 @@ class SettingsDialog(QMainWindow):
         try:
             self._analyzer.save_grain_csv(path)
             self.statusBar().showMessage(f"粒子面積CSVを保存しました: {path}", 5000)
+        except Exception as exc:
+            QMessageBox.critical(self, "エラー", str(exc))
+
+    def _export_result_csv(self) -> None:
+        default_name = f"{self._image_stem}_result.csv" if self._image_stem else "result.csv"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "結果サマリーCSVを保存", default_name,
+            "CSV ファイル (*.csv);;すべてのファイル (*)",
+        )
+        if not path:
+            return
+        try:
+            self._analyzer.save_result_csv(path)
+            self.statusBar().showMessage(f"結果サマリーCSVを保存しました: {path}", 5000)
         except Exception as exc:
             QMessageBox.critical(self, "エラー", str(exc))
 

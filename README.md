@@ -40,6 +40,8 @@ This software uses image processing functions from the **NIST Grain Size Analysi
 
 GSAT is developed by the National Institute of Standards and Technology (NIST). The GSAT source code is used under its original license terms. grainsize_measure is not affiliated with or endorsed by NIST.
 
+This application was developed with the assistance of [Claude Sonnet](https://claude.ai/) by Anthropic.
+
 ## License
 
 MIT License

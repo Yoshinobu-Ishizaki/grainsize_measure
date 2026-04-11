@@ -1,3 +1,0 @@
-- Add credit to README.md that this app is developed with you Claude Sonnet.
-- Add functionality to save calculation result to csv file with default name {stem}_result.csv.
-- With @tests/sample/c2600p_params_optimized.json, the grain calculated counts 559. But I don't see such number of colors mapped to. See @tests/sample/c2600p_asis_overlay.png. Find reason and fix it.

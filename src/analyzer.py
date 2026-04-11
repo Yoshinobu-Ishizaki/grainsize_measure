@@ -337,6 +337,7 @@ class GrainAnalyzer:
             "min_px": _f(lengths.min()),
             "max_px": _f(lengths.max()),
             "mean_um": None,
+            "std_um": None,
             "astm_grain_size_g": None,
         }
 
@@ -346,6 +347,7 @@ class GrainAnalyzer:
             if len(lengths_um) > 0:
                 mean_um = float(lengths_um.mean())
                 stats["mean_um"] = mean_um
+                stats["std_um"] = _f(lengths_um.std())
                 mean_mm = mean_um * 0.001
                 if mean_mm > 0:
                     # ASTM E112: G = -6.6457 * log10(L_mm) - 3.298
@@ -364,13 +366,29 @@ class GrainAnalyzer:
         def _f(v) -> float | None:
             return float(v) if v is not None else None
 
-        return {
+        stats: dict = {
             "count": len(areas),
             "mean_area_px": _f(areas.mean()),
             "std_area_px": _f(areas.std()),
             "mean_diam_px": _f(diams.mean()),
             "std_diam_px": _f(diams.std()),
+            "mean_area_um2": None,
+            "std_area_um2": None,
+            "mean_diam_um": None,
+            "std_diam_um": None,
         }
+
+        if "area_um2" in self.grain_df.columns:
+            areas_um = self.grain_df["area_um2"].drop_nulls()
+            diams_um = self.grain_df["equivalent_diameter_um"].drop_nulls()
+            if len(areas_um) > 0:
+                stats["mean_area_um2"] = _f(areas_um.mean())
+                stats["std_area_um2"] = _f(areas_um.std())
+            if len(diams_um) > 0:
+                stats["mean_diam_um"] = _f(diams_um.mean())
+                stats["std_diam_um"] = _f(diams_um.std())
+
+        return stats
 
     _GRAIN_PALETTE = [
         [220,  80,  80],   # red
@@ -429,7 +447,10 @@ class GrainAnalyzer:
         if self.original_image is None or self.binary_image is None:
             raise RuntimeError("解析が完了していません。")
 
-        gray = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
+        if self.original_image.ndim == 2:
+            gray = self.original_image
+        else:
+            gray = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
         overlay = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB).copy()
 
         # Color only accepted grains (those in grain_df, i.e. within grain_roi and filters)
@@ -458,6 +479,27 @@ class GrainAnalyzer:
                     overlay[row_idx, :].astype(np.int32) + [0, 30, 30], 0, 255
                 ).astype(np.uint8)
 
+        # Draw grain number for every 10th grain (sorted top-left to bottom-right)
+        if self.grain_df is not None and len(self.grain_df) > 0:
+            sorted_grains = self.grain_df.sort(["centroid_y", "centroid_x"])
+            h, w = overlay.shape[:2]
+            for grain_num, row in enumerate(sorted_grains.iter_rows(named=True), start=1):
+                if grain_num % 5 != 0:
+                    continue
+                cx = int(row["centroid_x"])
+                cy = int(row["centroid_y"])
+                if not (0 <= cx < w and 0 <= cy < h):
+                    continue
+                text = str(grain_num)
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 0.3
+                # Black outline for readability
+                for dx, dy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
+                    cv2.putText(overlay, text, (cx + dx, cy + dy), font,
+                                font_scale, (0, 0, 0), 1, cv2.LINE_AA)
+                cv2.putText(overlay, text, (cx, cy), font,
+                            font_scale, (255, 255, 255), 1, cv2.LINE_AA)
+
         return overlay
 
     def save_chord_csv(self, path: str | Path) -> None:
@@ -469,6 +511,27 @@ class GrainAnalyzer:
         if self.grain_df is None:
             raise RuntimeError("measure_grain_areas() を先に呼び出してください。")
         self.grain_df.write_csv(str(path))
+
+    def save_result_csv(self, path: str | Path) -> None:
+        """Save a combined summary CSV with chord and grain statistics."""
+        chord_stats = self.get_chord_statistics()
+        grain_stats = self.get_grain_statistics()
+
+        rows = []
+        for key, val in [
+            ("chord_count", chord_stats.get("count")),
+            ("chord_mean_length_um", chord_stats.get("mean_um")),
+            ("chord_std_length_um", chord_stats.get("std_um")),
+            ("astm_grain_size_g", chord_stats.get("astm_grain_size_g")),
+            ("grain_count", grain_stats.get("count")),
+            ("grain_mean_area_um2", grain_stats.get("mean_area_um2")),
+            ("grain_std_area_um2", grain_stats.get("std_area_um2")),
+            ("grain_mean_diameter_um", grain_stats.get("mean_diam_um")),
+            ("grain_std_diameter_um", grain_stats.get("std_diam_um")),
+        ]:
+            rows.append({"metric": key, "value": str(val) if val is not None else ""})
+
+        pl.DataFrame(rows).write_csv(str(path))
 
     def save_labeled_image(self, path: str | Path) -> None:
         overlay_rgb = self.render_overlay_image()
