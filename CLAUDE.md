@@ -23,6 +23,7 @@
 - テスト用のサンプルデータは `tests/sample` フォルダに保存される。
 - Use some GSAT sample data to verify implementation. Absolutely same result must be achieved as GSAT original.
 - GUIには PyQT6 を使用する。
+- Read @TODO.md and make a plan to tackle with it.
 
 ## Documentation
 
