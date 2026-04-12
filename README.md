@@ -51,10 +51,10 @@ See the [Parameter Guide](docs/parameter_guide.md) for all JSON fields.
 
 | Document | Description |
 |---|---|
-| [Parameter Guide (English)](docs/parameter_guide.md) | How to tune each processing parameter for better grain detection, with example images |
-| [Parameter Guide (日本語)](docs/parameter_guide_ja.md) | 各パラメータの設定方法と粒界検出への影響（画像付き） |
-| [CSV Output Guide (English)](docs/csv_output_guide.md) | Explanation of every column in the exported chords and grains CSV files |
-| [CSV Output Guide (日本語)](docs/csv_output_guide_ja.md) | 出力 CSV の全カラムの意味と計算方法の解説 |
+| [Parameter Guide](docs/parameter_guide.md) | How to tune each processing parameter for better grain detection, with example images |
+| [CSV Output Guide](docs/csv_output_guide.md) | Explanation of every column in the exported chords and grains CSV files |
+
+A Japanese translation of this README is available at [README_ja.md](README_ja.md).
 
 ## Acknowledgements
 
