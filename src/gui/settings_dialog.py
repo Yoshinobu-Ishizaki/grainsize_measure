@@ -865,7 +865,7 @@ class SettingsDialog(QMainWindow):
     def _open_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "画像を開く", "",
-            "画像ファイル (*.png *.jpg *.jpeg *.bmp *.tif *.tiff);;すべてのファイル (*)",
+            "画像ファイル (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;すべてのファイル (*)",
         )
         if not path:
             return

@@ -1,2 +1,2 @@
 - Grains of @tests/sample/13632_2022_901_Fig4_HTML.png and @tests/sample/c2600p_600c60min.png should be detected by areas with similar colors respectively. Develop such code to handle this kind of image. I mean locally similar color area -> one grain. If relatively different color found at its neighbours the grain stops there.
-- Add functionality to read *.webp file. Example is @tests/sample/Optical-micrograph-of-alpha-brass-Cu-30-Zn-alloy-showing-polyhedral-grains-and-the.webp
+- Add functionality to call this app as CLI. I mean, if called from terminal as `uv run src/brainsize_measurs.py` with argument `input.json` to process, and `--out grain|chord|stat|image` it should produce grain csv/chord csv/result statistics csv/overlayed png file respectively.
