@@ -67,6 +67,13 @@ fit_dists <- function(x) {
   )
 }
 
+# 分布ごとの統一カラー（密度オーバーレイ・Q-Qプロット共通）
+dist_colours <- c(
+  "対数正規分布" = "#E05A9A",
+  "ワイブル分布" = "#377EB8",
+  "ガンマ分布"   = "#4DAF4A"
+)
+
 fits_asis <- fit_dists(asis$equivalent_diameter_um)
 fits_heat <- fit_dists(heat$equivalent_diameter_um)
 
@@ -126,7 +133,7 @@ plot_fit_overlay <- function(df, fits, title_label) {
       linewidth = 0.9
     ) +
     scale_x_continuous(limits = c(0, max(x_max, 220)), breaks = seq(0, 220, 40)) +
-    scale_colour_brewer(palette = "Set1") +
+    scale_colour_manual(values = dist_colours) +
     labs(
       x = "等価円直径 (µm)", y = "確率密度",
       title = title_label,
@@ -337,6 +344,10 @@ fit_wide <- fit_info |>
   arrange(統計量) |>
   dplyr::select(統計量, lnorm_asis, lnorm_heat, weibull_asis, weibull_heat, gamma_asis, gamma_heat)
 
+dist_to_key <- c("対数正規分布" = "lnorm", "ワイブル分布" = "weibull", "ガンマ分布" = "gamma")
+best_asis_col <- paste0(dist_to_key[best_asis], "_asis")
+best_heat_col <- paste0(dist_to_key[best_heat], "_heat")
+
 fit_wide |>
   gt(rowname_col = "統計量") |>
   tab_header(title = "分布フィッティングパラメータと適合度指標") |>
@@ -349,6 +360,14 @@ fit_wide |>
   tab_style(
     style     = cell_text(weight = "bold"),
     locations = cells_column_spanners()
+  ) |>
+  tab_style(
+    style     = cell_text(color = "#00ACC1", weight = "bold"),
+    locations = cells_body(columns = all_of(best_asis_col), rows = 統計量 == "AIC")
+  ) |>
+  tab_style(
+    style     = cell_text(color = "#00ACC1", weight = "bold"),
+    locations = cells_body(columns = all_of(best_heat_col), rows = 統計量 == "AIC")
   ) |>
   tab_options(
     column_labels.font.weight = "bold",
@@ -375,16 +394,18 @@ plot_fit_overlay(heat, fits_heat, "600°C/60分焼鈍：観測ヒストグラム
 
 ```{r qqplot-asis, fig.width=7, fig.height=5}
 qqcomp(
-  list(fits_asis$lnorm, fits_asis$weibull, fits_asis$gamma),
-  legendtext = c("対数正規分布", "ワイブル分布", "ガンマ分布"),
+  list(fits_asis$gamma, fits_asis$weibull, fits_asis$lnorm),
+  legendtext = c("ガンマ分布", "ワイブル分布", "対数正規分布"),
+  fitcol = unname(dist_colours[c("ガンマ分布", "ワイブル分布", "対数正規分布")]),
   main = "Q-Qプロット：加工なし"
 )
 ```
 
 ```{r qqplot-heat, fig.width=7, fig.height=5}
 qqcomp(
-  list(fits_heat$lnorm, fits_heat$weibull, fits_heat$gamma),
-  legendtext = c("対数正規分布", "ワイブル分布", "ガンマ分布"),
+  list(fits_heat$gamma, fits_heat$weibull, fits_heat$lnorm),
+  legendtext = c("ガンマ分布", "ワイブル分布", "対数正規分布"),
+  fitcol = unname(dist_colours[c("ガンマ分布", "ワイブル分布", "対数正規分布")]),
   main = "Q-Qプロット：600°C/60分焼鈍"
 )
 ```
