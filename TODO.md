@@ -1,1 +1,0 @@
-- Grains of @tests/sample/13632_2022_901_Fig4_HTML.png and @tests/sample/c2600p_600c60min.png should be detected by areas with similar colors respectively. Develop such code to handle this kind of image. I mean locally similar color area -> one grain. If relatively different color found at its neighbours the grain stops there.

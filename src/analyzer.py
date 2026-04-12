@@ -38,6 +38,15 @@ class AnalysisParams:
     clahe_clip_limit: float = 0.0  # 0.0 = disabled; CLAHE clip limit (typical 1.0–5.0)
     clahe_tile_size: int = 8       # CLAHE tile grid size (NxN)
 
+    # --- Detection mode ---
+    detection_method: Literal["threshold", "color_region"] = "threshold"
+
+    # --- Color-region segmentation (felzenszwalb) ---
+    color_scale: float = 200.0    # graph edge weight threshold (50–2000)
+    color_sigma: float = 0.8      # pre-smoothing Gaussian sigma (0.1–3.0)
+    color_min_size: int = 100     # minimum component size in pixels
+    color_morph_close_radius: int = 0  # 0 = disabled; dilation radius to close boundary gaps
+
     # --- Intercept measurement (Track A) ---
     line_spacing: int = 20       # pixels between parallel lines
     row_scan_start: int = 0      # first row to scan (0 = GSAT-compatible)
@@ -162,10 +171,48 @@ class GrainAnalyzer:
 
         self.binary_image = img
 
+    def segment_by_color(self) -> None:
+        """Color-region segmentation via felzenszwalb graph-based algorithm.
+
+        Sets self.binary_image (uint8, 255=boundary, 0=interior) and
+        self.labeled_grains (int32, 1-indexed) directly, bypassing the
+        GSAT threshold pipeline.  self.original_image must be BGR uint8.
+        """
+        if self.original_image is None:
+            raise RuntimeError("load_image() を先に呼び出してください。")
+
+        from skimage.segmentation import felzenszwalb, find_boundaries
+
+        p = self.params
+        rgb = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB)
+
+        segments = felzenszwalb(
+            rgb,
+            scale=p.color_scale,
+            sigma=p.color_sigma,
+            min_size=p.color_min_size,
+        )
+
+        # 1-indexed label map compatible with regionprops
+        self.labeled_grains = (segments + 1).astype(np.int32)
+
+        # 1px boundary image compatible with measure_intercepts()
+        boundary = find_boundaries(segments, mode="outer")
+        self.binary_image = (boundary.astype(np.uint8) * 255)
+
+        if p.color_morph_close_radius > 0:
+            self.binary_image = sdrv.apply_driver_morph(
+                self.binary_image, [0, 1, p.color_morph_close_radius], quiet_in=True
+            )
+            self.labeled_grains = None  # force watershed re-run in measure_grain_areas()
+
     def run_segmentation(self, params: AnalysisParams) -> np.ndarray:
-        """Step 1: run GSAT pipeline on the full image → binary. Returns binary_image."""
+        """Step 1: segment the image (threshold or color mode). Returns binary_image."""
         self.params = params
-        self.segment_image()
+        if params.detection_method == "color_region":
+            self.segment_by_color()
+        else:
+            self.segment_image()
         return self.binary_image  # type: ignore[return-value]
 
     def run_measurement(self, params: AnalysisParams) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -259,23 +306,25 @@ class GrainAnalyzer:
 
         p = self.params
 
-        # GSAT binary: 255=boundary → invert so grain interior=True for distance transform
-        binary_grains = self.binary_image == 0  # True where grain interior
+        # Color-region mode: labeled_grains already set by segment_by_color() — skip watershed
+        if self.labeled_grains is None:
+            # GSAT binary: 255=boundary → invert so grain interior=True for distance transform
+            binary_grains = self.binary_image == 0  # True where grain interior
 
-        distance = ndimage.distance_transform_edt(binary_grains)
+            distance = ndimage.distance_transform_edt(binary_grains)
 
-        # One marker per connected interior component — guarantees no grain is
-        # ever split by watershed regardless of grain size or shape.
-        labeled_components = measure.label(binary_grains)
-        markers_labeled = np.zeros_like(labeled_components)
-        for cid in range(1, labeled_components.max() + 1):
-            component_mask = labeled_components == cid
-            local_dist = distance * component_mask
-            if local_dist.max() > 0:
-                peak = np.unravel_index(local_dist.argmax(), local_dist.shape)
-                markers_labeled[peak] = cid
+            # One marker per connected interior component — guarantees no grain is
+            # ever split by watershed regardless of grain size or shape.
+            labeled_components = measure.label(binary_grains)
+            markers_labeled = np.zeros_like(labeled_components)
+            for cid in range(1, labeled_components.max() + 1):
+                component_mask = labeled_components == cid
+                local_dist = distance * component_mask
+                if local_dist.max() > 0:
+                    peak = np.unravel_index(local_dist.argmax(), local_dist.shape)
+                    markers_labeled[peak] = cid
 
-        self.labeled_grains = segmentation.watershed(-distance, markers_labeled, mask=binary_grains)
+            self.labeled_grains = segmentation.watershed(-distance, markers_labeled, mask=binary_grains)
 
         height, width = self.labeled_grains.shape
         properties = measure.regionprops(self.labeled_grains)

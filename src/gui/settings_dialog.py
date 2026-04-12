@@ -194,9 +194,18 @@ class _ImageProcessTab(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
+        # --- Detection mode ---
+        grp_mode = QGroupBox("検出モード")
+        form_mode = QFormLayout(grp_mode)
+        self.combo_detection = QComboBox()
+        self.combo_detection.addItems(["グレースケール閾値 (GSAT)", "色領域 (Felzenszwalb)"])
+        self.combo_detection.setCurrentIndex(0)
+        form_mode.addRow("検出方法:", self.combo_detection)
+        layout.addWidget(grp_mode)
+
         # --- Segmentation ---
-        grp_seg = QGroupBox("セグメンテーション (GSAT)")
-        form_seg = QFormLayout(grp_seg)
+        self.grp_seg = QGroupBox("セグメンテーション (GSAT)")
+        form_seg = QFormLayout(self.grp_seg)
 
         self.chk_invert = QCheckBox("グレースケール反転 (暗い境界線)")
         self.chk_invert.setChecked(True)
@@ -278,7 +287,45 @@ class _ImageProcessTab(QWidget):
         self.chk_skeletonize.setChecked(False)
         form_seg.addRow(self.chk_skeletonize)
 
-        layout.addWidget(grp_seg)
+        layout.addWidget(self.grp_seg)
+
+        # --- Color-region segmentation (Felzenszwalb) ---
+        self.grp_color = QGroupBox("色領域セグメンテーション (Felzenszwalb)")
+        form_color = QFormLayout(self.grp_color)
+
+        self.spin_color_scale = QDoubleSpinBox()
+        self.spin_color_scale.setRange(10.0, 5000.0)
+        self.spin_color_scale.setSingleStep(50.0)
+        self.spin_color_scale.setValue(200.0)
+        self.spin_color_scale.setToolTip("大きいほど少ない・大きい粒子 (50–2000 が目安)")
+        form_color.addRow("スケール:", self.spin_color_scale)
+
+        self.spin_color_sigma = QDoubleSpinBox()
+        self.spin_color_sigma.setRange(0.0, 5.0)
+        self.spin_color_sigma.setSingleStep(0.1)
+        self.spin_color_sigma.setDecimals(2)
+        self.spin_color_sigma.setValue(0.8)
+        self.spin_color_sigma.setToolTip("前処理ガウシアンσ (0.1–3.0)")
+        form_color.addRow("シグマ:", self.spin_color_sigma)
+
+        self.spin_color_min_size = QSpinBox()
+        self.spin_color_min_size.setRange(10, 50000)
+        self.spin_color_min_size.setSingleStep(50)
+        self.spin_color_min_size.setValue(100)
+        self.spin_color_min_size.setToolTip("最小セグメントサイズ (px²)")
+        form_color.addRow("最小サイズ (px²):", self.spin_color_min_size)
+
+        self.spin_color_morph_close = QSpinBox()
+        self.spin_color_morph_close.setRange(0, 20)
+        self.spin_color_morph_close.setSingleStep(1)
+        self.spin_color_morph_close.setValue(0)
+        self.spin_color_morph_close.setToolTip("境界線の隙間を閉じるための膨張半径 (px)。0 = 無効")
+        form_color.addRow("境界クロージング半径:", self.spin_color_morph_close)
+
+        layout.addWidget(self.grp_color)
+
+        self.combo_detection.currentIndexChanged.connect(self._on_detection_mode_changed)
+        self._on_detection_mode_changed(0)
 
         layout.addStretch()
 
@@ -289,6 +336,11 @@ class _ImageProcessTab(QWidget):
         self.spin_threshold_value.setEnabled(is_global or is_hysteresis)
         self.spin_threshold_high.setEnabled(is_hysteresis)
         self.spin_adaptive_block.setEnabled(is_adaptive)
+
+    def _on_detection_mode_changed(self, index: int) -> None:
+        is_color = (index == 1)
+        self.grp_seg.setVisible(not is_color)
+        self.grp_color.setVisible(is_color)
 
     def get_processing_params(self) -> dict:
         method_map = {0: "global_threshold", 1: "adaptive_threshold", 2: "hysteresis_threshold"}
@@ -311,6 +363,11 @@ class _ImageProcessTab(QWidget):
             "min_feature_size": self.spin_min_feature.value(),
             "max_hole_size": 10,
             "skeletonize": self.chk_skeletonize.isChecked(),
+            "detection_method": "color_region" if self.combo_detection.currentIndex() == 1 else "threshold",
+            "color_scale": self.spin_color_scale.value(),
+            "color_sigma": self.spin_color_sigma.value(),
+            "color_min_size": self.spin_color_min_size.value(),
+            "color_morph_close_radius": self.spin_color_morph_close.value(),
         }
 
     def set_processing_params(self, data: dict) -> None:
@@ -330,6 +387,12 @@ class _ImageProcessTab(QWidget):
         self.spin_morph_open.setValue(int(data.get("morph_open_radius", 0)))
         self.spin_min_feature.setValue(int(data.get("min_feature_size", 64)))
         self.chk_skeletonize.setChecked(bool(data.get("skeletonize", False)))
+        det_method = data.get("detection_method", "threshold")
+        self.combo_detection.setCurrentIndex(1 if det_method == "color_region" else 0)
+        self.spin_color_scale.setValue(float(data.get("color_scale", 200.0)))
+        self.spin_color_sigma.setValue(float(data.get("color_sigma", 0.8)))
+        self.spin_color_min_size.setValue(int(data.get("color_min_size", 100)))
+        self.spin_color_morph_close.setValue(int(data.get("color_morph_close_radius", 0)))
 
 
 class _GrainCalcTab(QWidget):
