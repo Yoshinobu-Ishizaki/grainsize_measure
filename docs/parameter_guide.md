@@ -14,6 +14,73 @@ The image below shows the result with the optimized baseline parameters for `c26
 
 ---
 
+## 0. Detection Mode (`detection_method`)
+
+| Value | Description |
+|---|---|
+| `"threshold"` | **(default)** GSAT pipeline — grayscale → threshold → binary boundary image. Use for images with clear dark or bright boundary lines between grains (etched optical micrographs, polished SEM). |
+| `"color_region"` | Felzenszwalb graph-based segmentation — identifies contiguous regions of similar color as individual grains. Use when grains differ in color rather than having visible boundary lines (EBSD maps, strongly etched color micrographs). |
+
+When `"threshold"` is selected, configure parameters in **Section 1**.  
+When `"color_region"` is selected, configure parameters in **Section 0a** below; the GSAT pipeline is bypassed entirely.
+
+---
+
+### 0a. Color-Region Segmentation (Felzenszwalb)
+
+These parameters apply only when `detection_method = "color_region"`.
+
+#### `color_scale`
+
+| Default | 200.0 |
+|---|---|
+| Range | 10 – 5000 |
+
+Controls the threshold on graph edge weights — the key sensitivity parameter. A higher value merges more adjacent regions together, producing fewer and larger grains. A lower value keeps more regions separate, producing more and smaller grains.
+
+- `color_scale = 50–100`: fine segmentation; many small grains. Use for fine-grained microstructures.
+- `color_scale = 200–500`: moderate segmentation; typical starting point.
+- `color_scale = 1000+`: coarse segmentation; only large color blocks remain.
+
+**Start at 200 and adjust** by looking at the overlay image: if many small fragments appear inside what should be a single grain, increase the scale. If neighboring grains merge into one, decrease it.
+
+#### `color_sigma`
+
+| Default | 0.8 |
+|---|---|
+| Range | 0.0 – 5.0 |
+
+Standard deviation of the Gaussian smoothing applied to the image before segmentation. Higher values blur the image more, reducing the effect of fine texture and noise within grains.
+
+- `color_sigma = 0.0`: no smoothing — every pixel color variation is considered.
+- `color_sigma = 0.5–1.0`: mild smoothing; recommended for most optical images.
+- `color_sigma = 2.0+`: heavy smoothing; use only when grain interiors have strong texture that causes false sub-grain splits.
+
+#### `color_min_size`
+
+| Default | 100 px² |
+|---|---|
+| Range | 10 – 50 000 |
+
+Minimum area of a segment in pixels. Any region smaller than this is merged into its largest neighboring region. Use this to eliminate small boundary artifacts and surface noise.
+
+- `color_min_size = 50–100`: removes only tiny speckles.
+- `color_min_size = 500–2000`: aggressively eliminates small regions; use when fine texture creates many sub-grain fragments.
+
+#### `color_morph_close_radius`
+
+| Default | 0 (disabled) |
+|---|---|
+| Range | 0 – 20 |
+
+After boundaries are computed from the Felzenszwalb result, a morphological closing (dilation then erosion) of this radius is applied to seal small gaps in boundary lines. When non-zero, the boundary image is re-used to run watershed and re-derive the grain label map.
+
+- `radius = 0`: disabled; use the raw Felzenszwalb boundaries.
+- `radius = 1–2`: closes 1–3 px gaps; useful when thin color gradients produce slightly broken boundaries.
+- `radius ≥ 4`: may connect unrelated boundaries.
+
+---
+
 ## 1. Segmentation (GSAT pipeline)
 
 The segmentation section converts a grayscale image into a binary boundary image through a fixed sequence of steps:

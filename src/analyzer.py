@@ -605,7 +605,10 @@ class GrainAnalyzer:
     def run_pipeline(self, params: AnalysisParams) -> tuple[pl.DataFrame, pl.DataFrame]:
         """Full pipeline: segment → intercept measurement + grain area measurement."""
         self.params = params
-        self.segment_image()
+        if params.detection_method == "color_region":
+            self.segment_by_color()
+        else:
+            self.segment_image()
         chord_df = self.measure_intercepts()
         grain_df = self.measure_grain_areas()
         return chord_df, grain_df

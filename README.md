@@ -6,6 +6,7 @@ A Python GUI application that analyses grain structure observation images (with 
 
 - Automatic scale bar detection from embedded dimension markers (px/µm)
 - GSAT-based image segmentation pipeline (CLAHE → denoise → sharpen → threshold → morphology)
+- **Color-region detection** — Felzenszwalb graph-based segmentation for images where grains are distinguished by color (EBSD maps, etched optical micrographs with distinct grain colors) rather than explicit boundary lines
 - **Track A** — ASTM E112 intercept method: chord length measurement at multiple angles
 - **Track B** — Per-grain area measurement via watershed segmentation
 - Interactive ROI selection for grain area and scale bar regions
@@ -20,11 +21,31 @@ A Python GUI application that analyses grain structure observation images (with 
 - Python 3.11+
 - [uv](https://github.com/astral-sh/uv)
 
-## Usage
+## GUI
 
 ```bash
 uv run src/grainsize_measure.py
 ```
+
+## CLI
+
+Run analysis without the GUI:
+
+```bash
+# Generate a default params JSON from an image:
+uv run src/grainsize_measure_cli.py image.png
+
+# Run analysis and write all output types:
+uv run src/grainsize_measure_cli.py params.json --out grain chord stat image
+
+# Write only grain CSV with a custom output name stem:
+uv run src/grainsize_measure_cli.py params.json --out grain --oname results
+```
+
+The params JSON controls all analysis options including detection mode. Set
+`"detection_method": "color_region"` and the Felzenszwalb parameters to use
+color-based grain detection instead of the default GSAT threshold pipeline.
+See the [Parameter Guide](docs/parameter_guide.md) for all JSON fields.
 
 ## Documentation
 
