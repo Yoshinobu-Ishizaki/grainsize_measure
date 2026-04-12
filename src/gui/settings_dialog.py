@@ -119,7 +119,7 @@ class _OptimizerProgressDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        self._phase_label = QLabel("フェーズ 1: 閾値手法スキャン中...")
+        self._phase_label = QLabel("フェーズ 1: 初期スキャン中...")
         layout.addWidget(self._phase_label)
 
         self._progress_bar = QProgressBar()
@@ -140,7 +140,7 @@ class _OptimizerProgressDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def set_phase1_progress(self, n: int, total: int) -> None:
-        self._phase_label.setText(f"フェーズ 1: 閾値手法スキャン ({n}/{total})")
+        self._phase_label.setText(f"フェーズ 1: 初期スキャン ({n}/{total})")
         self._progress_bar.setRange(0, total)
         self._progress_bar.setValue(n)
 

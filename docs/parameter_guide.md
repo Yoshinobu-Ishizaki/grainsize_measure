@@ -386,10 +386,22 @@ The input `params.json` must contain `image_path` and `grain_roi`. Save it from 
 
 ### What the optimizer searches
 
-The optimizer uses a two-phase search:
+The search strategy depends on the **detection mode** selected in the UI when the optimizer is launched.
+
+#### Grayscale threshold mode (GSAT)
+
+Two-phase search:
 
 - **Phase 1:** Exhaustive sweep of `invert_grayscale × threshold_method` (6 combinations) to find the top 2.
 - **Phase 2:** 150-sample random search over the remaining parameters (denoise, sharpen, threshold values, morphology radii, CLAHE, feature sizes) within each top combo.
+
+#### Color-region mode (Felzenszwalb)
+
+Single-phase search (Phase 1 is skipped):
+
+- **Phase 2:** 150-sample random search over `color_scale`, `color_sigma`, `color_min_size`, and `color_morph_close_radius`.
+
+#### Score function (both modes)
 
 **Score:** `grain_count × coverage_ratio` (capped at 0.90). This rewards finding more genuine grains covering more of the ROI area.
 

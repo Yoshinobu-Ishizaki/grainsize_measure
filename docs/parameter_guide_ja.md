@@ -387,10 +387,22 @@ uv run scripts/optimize_params.py --params path/to/params.json --out path/to/par
 
 ### 探索内容
 
-最適化は 2 フェーズで実行されます。
+探索方式は、最適化実行時に UI で選択している **検出モード** によって異なります。
+
+#### グレースケール閾値モード (GSAT)
+
+2 フェーズで実行されます。
 
 - **フェーズ 1:** `invert_grayscale × threshold_method` の 6 通りを全数探索し、上位 2 件を選出。
 - **フェーズ 2:** 上位 2 件それぞれについて、残りのパラメータ（ノイズ除去・鮮鋭化・閾値・モルフォロジー半径・CLAHE・フィーチャサイズ）を 150 サンプルのランダム探索。
+
+#### 色領域モード (Felzenszwalb)
+
+フェーズ 1 はスキップされ、フェーズ 2 のみ実行されます。
+
+- **フェーズ 2:** `color_scale`・`color_sigma`・`color_min_size`・`color_morph_close_radius` を 150 サンプルのランダム探索。
+
+#### スコア関数（両モード共通）
 
 **スコア:** `grain_count × coverage_ratio`（上限 0.90）。ROI 面積を有効粒子がより広くカバーするほど高得点になります。
 

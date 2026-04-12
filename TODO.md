@@ -1,6 +1,3 @@
-- Update parameter optimizer to switch GSAT/Felzenszwalb based on current user selection. Parameter space to be searched are quite different on those methods.   
-
-
 ## Analysis document
 
 - Create a sample R quarto analysis document in tests/sample folder. 
