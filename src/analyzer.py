@@ -584,13 +584,26 @@ class GrainAnalyzer:
             accepted_ids = self.grain_df["grain_id"].to_list()
             adj = self._build_adjacency(self.labeled_grains)
             color_map = self._greedy_color(adj, accepted_ids)
+
+            # Build a per-label color LUT and apply it in a single O(N) fancy-index
+            # instead of the O(N×G) per-grain mask loop.
+            max_label = int(self.labeled_grains.max())
+            lut = np.zeros((max_label + 1, 3), dtype=np.float32)
             for i, label_id in enumerate(sorted(accepted_ids)):
                 palette_idx = color_map.get(label_id, i % len(self._GRAIN_PALETTE))
-                color = np.array(self._GRAIN_PALETTE[palette_idx], dtype=np.float32)
-                mask = self.labeled_grains == label_id
-                overlay[mask] = (
-                    overlay[mask].astype(np.float32) * 0.5 + color * 0.5
-                ).astype(np.uint8)
+                lut[label_id] = self._GRAIN_PALETTE[palette_idx]
+
+            grain_colors = lut[self.labeled_grains]          # (H, W, 3) float32
+
+            acc_mask_1d = np.zeros(max_label + 1, dtype=bool)
+            acc_mask_1d[accepted_ids] = True
+            grain_mask = acc_mask_1d[self.labeled_grains]    # (H, W) bool
+
+            overlay_f = overlay.astype(np.float32)
+            overlay_f[grain_mask] = (
+                overlay_f[grain_mask] * 0.5 + grain_colors[grain_mask] * 0.5
+            )
+            overlay = overlay_f.astype(np.uint8)
 
         # Draw boundaries in white on top
         boundary_mask = self.binary_image > 0
@@ -600,10 +613,10 @@ class GrainAnalyzer:
         if self.params is not None:
             height = overlay.shape[0]
             start_row = self.params.line_spacing // 2
-            for row_idx in range(start_row, height, self.params.line_spacing):
-                overlay[row_idx, :] = np.clip(
-                    overlay[row_idx, :].astype(np.int32) + [0, 30, 30], 0, 255
-                ).astype(np.uint8)
+            rows = np.arange(start_row, height, self.params.line_spacing)
+            overlay[rows, :] = np.clip(
+                overlay[rows, :].astype(np.int32) + [0, 30, 30], 0, 255
+            ).astype(np.uint8)
 
         # Draw grain number for every ~1% of total grain count (sorted top-left to bottom-right)
         if self.grain_df is not None and len(self.grain_df) > 0:
