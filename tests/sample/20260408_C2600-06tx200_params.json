@@ -18,8 +18,8 @@
   "max_hole_size": 10,
   "skeletonize": false,
   "detection_method": "color_region",
-  "color_scale": 250.0,
-  "color_sigma": 1.2000000000000002,
+  "color_scale": 300.0,
+  "color_sigma": 1.2,
   "color_min_size": 50,
   "color_morph_close_radius": 1,
   "pixels_per_um": 1.945,
@@ -45,8 +45,8 @@
   "min_grain_area": 50,
   "exclude_edge_grains": true,
   "edge_buffer": 5,
-  "image_path": "D:\\develop\\grainsize_measure\\tests\\sample\\20260408_C2600-06tx200.jpg",
-  "scale_bar_x1": 2364,
-  "scale_bar_x2": 2753,
-  "scale_bar_y": 1981
+  "image_path": "/home/yoshinobu/develop/grainsize_measure/tests/sample/20260408_C2600-06tx200.jpg",
+  "scale_bar_x1": null,
+  "scale_bar_x2": null,
+  "scale_bar_y": null
 }
