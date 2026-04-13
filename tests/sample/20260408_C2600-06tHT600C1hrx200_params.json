@@ -26,14 +26,14 @@
   "grain_roi": [
     0,
     70,
-    573,
-    240
+    574,
+    242
   ],
   "marker_roi": [
-    463,
-    386,
-    101,
-    17
+    467,
+    388,
+    87,
+    13
   ],
   "line_spacing": 60,
   "row_scan_start": 0,
@@ -45,7 +45,7 @@
   "min_grain_area": 50,
   "exclude_edge_grains": true,
   "edge_buffer": 5,
-  "image_path": "D:\\develop\\grainsize_measure\\20260408_C2600-06tHT600C1hrx200.jpg",
+  "image_path": "D:\\develop\\grainsize_measure\\tests\\sample\\20260408_C2600-06tHT600C1hrx200.jpg",
   "scale_bar_x1": 474,
   "scale_bar_x2": 551,
   "scale_bar_y": 396
