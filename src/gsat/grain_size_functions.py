@@ -216,25 +216,14 @@ def measure_line_dist(segs_local_arr_in, line_global_arr_in):
     # using the Pythagorean theorem.
 
 
-    seg_dist_arr_out = np.zeros(segs_local_arr_in.shape[0], dtype=np.float64)
-    line_global_r = line_global_arr_in[:,0]
-    line_global_c = line_global_arr_in[:,1]
-    
-    for m, cur_seg in enumerate(segs_local_arr_in):
-        cur_seg_i_start = cur_seg[0]
-        cur_seg_i_end = cur_seg[1]
-
-        pixel_coord_start_r = line_global_r[cur_seg_i_start]
-        pixel_coord_start_c = line_global_c[cur_seg_i_start]
-        pixel_coord_end_r = line_global_r[cur_seg_i_end]
-        pixel_coord_end_c = line_global_c[cur_seg_i_end]
-
-        temp_diff_1 = (pixel_coord_start_r - pixel_coord_end_r)**2
-        temp_diff_2 = (pixel_coord_start_c - pixel_coord_end_c)**2
-        pixel_global_distance = np.sqrt(temp_diff_1 + temp_diff_2)
-
-        seg_dist_arr_out[m] = pixel_global_distance
-    
+    line_global_r = line_global_arr_in[:, 0]
+    line_global_c = line_global_arr_in[:, 1]
+    starts = segs_local_arr_in[:, 0]
+    ends = segs_local_arr_in[:, 1]
+    seg_dist_arr_out = np.hypot(
+        line_global_r[ends] - line_global_r[starts],
+        line_global_c[ends] - line_global_c[starts],
+    )
     return seg_dist_arr_out
 
 
@@ -262,49 +251,31 @@ def measure_circular_dist(segs_local_arr_in, circ_global_arr_in):
     # circle and the angle between the start and stop coordinates.
 
 
-    seg_dist_arr_out = np.zeros(segs_local_arr_in.shape[0], dtype=np.float64)
-    circ_global_r = circ_global_arr_in[:,0]
-    circ_global_c = circ_global_arr_in[:,1]
-
     # Calculate the center of the circle
-    circ_center = np.mean(circ_global_arr_in, axis=0)
-    circ_center_r = circ_center[0]
-    circ_center_c = circ_center[1]
+    circ_center = np.mean(circ_global_arr_in, axis=0)  # shape (2,)
+    starts = segs_local_arr_in[:, 0]
+    ends = segs_local_arr_in[:, 1]
 
-    for m, cur_seg in enumerate(segs_local_arr_in):
-        cur_seg_i_start = cur_seg[0]
-        cur_seg_i_end = cur_seg[1]
+    # Radial vectors from center to each segment endpoint — shape (N, 2)
+    vec_a = circ_global_arr_in[starts] - circ_center
+    vec_b = circ_global_arr_in[ends] - circ_center
 
-        pixel_coord_start_r = circ_global_r[cur_seg_i_start]
-        pixel_coord_start_c = circ_global_c[cur_seg_i_start]
-        pixel_coord_end_r = circ_global_r[cur_seg_i_end]
-        pixel_coord_end_c = circ_global_c[cur_seg_i_end]
+    # Magnitudes (= radii) — shape (N,)
+    mag_a = np.linalg.norm(vec_a, axis=1)
+    mag_b = np.linalg.norm(vec_b, axis=1)
 
-        radial_vec_a = np.array([pixel_coord_start_r - circ_center_r, \
-                                 pixel_coord_start_c - circ_center_c])
-        radial_vec_b = np.array([pixel_coord_end_r - circ_center_r, \
-                                 pixel_coord_end_c - circ_center_c])
-        
-        # It's a circle, so the magnitude of this vector is also the radius,
-        # and the radius of vector A (the start) should be approximately the
-        # same as the radius of vector B (the end),
-        radial_vec_a_mag = np.sqrt((radial_vec_a[0])**2 + (radial_vec_a[1])**2)
-        radial_vec_a = radial_vec_a/radial_vec_a_mag # Make unit vector
+    # Unit vectors
+    unit_a = vec_a / mag_a[:, None]
+    unit_b = vec_b / mag_b[:, None]
 
-        radial_vec_b_mag = np.sqrt((radial_vec_b[0])**2 + (radial_vec_b[1])**2)
-        radial_vec_b = radial_vec_b/radial_vec_b_mag # Make unit vector
+    # Arc angle between the two radii
+    dots = np.clip(np.sum(unit_a * unit_b, axis=1), -1, 1)
+    thetas = np.abs(np.arccos(dots))
 
-        temp_clipped_dot = np.clip(np.dot(radial_vec_a, radial_vec_b), -1, 1)
-        cur_theta = np.absolute(np.arccos(temp_clipped_dot))
+    # Arc length = average radius × angle (handles discrete pixel rounding)
+    radii = (mag_a + mag_b) / 2.0
+    seg_dist_arr_out = radii * thetas
 
-        # Even if they are about the same, there will be some round-off errors
-        # and subtle differences since discrete, pixel coordinates are being
-        # used. So, might as well take the average.
-        cur_radius = (radial_vec_a_mag + radial_vec_b_mag)/2.0
-        pixel_global_distance = cur_radius*cur_theta
-
-        seg_dist_arr_out[m] = pixel_global_distance
-    
     return seg_dist_arr_out
 
 

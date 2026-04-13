@@ -52,7 +52,7 @@ from gui.viewer_window import ViewerWindow
 # ---------------------------------------------------------------------------
 
 class _ImageProcessWorker(QObject):
-    finished = pyqtSignal(object)   # binary ndarray
+    finished = pyqtSignal(object)   # binary_rgb ndarray (H, W, 3)
     error = pyqtSignal(str)
     cancelled = pyqtSignal()
     progress = pyqtSignal(str, int, int)   # label, current, total
@@ -73,7 +73,8 @@ class _ImageProcessWorker(QObject):
                 progress_cb=lambda l, c, t: self.progress.emit(l, c, t),
                 cancel_check=lambda: self._cancel_flag,
             )
-            self.finished.emit(binary)
+            binary_rgb = cv2.cvtColor(binary, cv2.COLOR_GRAY2RGB)
+            self.finished.emit(binary_rgb)
         except GrainAnalyzer.Cancelled:
             self.cancelled.emit()
         except Exception as exc:
@@ -1357,13 +1358,11 @@ class SettingsDialog(QMainWindow):
         self._process_thread = None
         self._process_worker = None
 
-    def _on_image_process_done(self, binary: np.ndarray) -> None:
+    def _on_image_process_done(self, binary_rgb: np.ndarray) -> None:
         if self._process_dlg is not None:
             self._process_dlg.mark_done()
             self._process_dlg = None
 
-        # Convert binary (0/255) to RGB for display
-        binary_rgb = cv2.cvtColor(binary, cv2.COLOR_GRAY2RGB)
         self._processed_binary_rgb = binary_rgb
         self._refresh_original_with_scale_bar()
         self._refresh_processed_with_scale_bar()
