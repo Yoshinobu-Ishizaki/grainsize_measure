@@ -245,18 +245,23 @@ class TestGetChordStatistics:
 
     def test_statistics_keys(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
         analyzer.load_image(synthetic_image)
+        # Use minimal processing so the bright grid lines survive intact as boundaries.
+        # invert_grayscale=False: boundaries are already bright (200 out of 255).
+        # Low denoise_h and no sharpening keep the grid lines well above threshold_value=100.
         analyzer.params = AnalysisParams(
-            denoise_h=5.0, denoise_patch=5, denoise_search=11,
-            sharpen_radius=1, sharpen_amount=0.5,
-            threshold_value=100, morph_close_radius=1, morph_open_radius=1,
-            min_feature_size=5, max_hole_size=5,
+            invert_grayscale=False,
+            denoise_h=0.1, denoise_patch=3, denoise_search=7,
+            sharpen_radius=0, sharpen_amount=0.0,
+            threshold_method="global_threshold",
+            threshold_value=100,
+            morph_close_radius=0, morph_open_radius=0,
+            min_feature_size=1, max_hole_size=1,
             line_spacing=20, n_theta_steps=1,
         )
         analyzer.segment_image()
         analyzer.measure_intercepts()
         stats = analyzer.get_chord_statistics()
-        if not stats:
-            pytest.skip("Synthetic image produced no detectable chords via GSAT pipeline")
+        assert stats, "Synthetic grid image must produce detectable chords"
         assert {"count", "mean_px", "std_px", "min_px", "max_px"}.issubset(stats.keys())
 
     def test_astm_g_computed_with_scale(self, analyzer: GrainAnalyzer, synthetic_image: Path) -> None:
@@ -503,3 +508,209 @@ class TestGSATCompatibility:
         assert abs(our_mean - ref_mean) / ref_mean < 0.05, (
             f"Mean chord mismatch: ours={our_mean:.1f}, ref={ref_mean:.1f}"
         )
+
+
+# ---------------------------------------------------------------------------
+# segment_by_color (Felzenszwalb)
+# ---------------------------------------------------------------------------
+
+class TestSegmentByColor:
+    def _make_color_quadrant_image(self, tmp_path: Path) -> Path:
+        """4色の正方形を持つBGR合成画像を作成する (2x2のカラーグリッド)。"""
+        import cv2
+        img = np.zeros((200, 200, 3), dtype=np.uint8)
+        img[:100, :100] = [200, 50, 50]    # 左上: 青っぽい
+        img[:100, 100:] = [50, 200, 50]    # 右上: 緑っぽい
+        img[100:, :100] = [50, 50, 200]    # 左下: 赤っぽい
+        img[100:, 100:] = [200, 200, 50]   # 右下: シアンっぽい
+        path = tmp_path / "color_quadrant.png"
+        cv2.imwrite(str(path), img)
+        return path
+
+    def test_segment_produces_binary_and_labels(
+        self, analyzer: GrainAnalyzer, tmp_path: Path
+    ) -> None:
+        path = self._make_color_quadrant_image(tmp_path)
+        analyzer.load_image(path)
+        analyzer.params = AnalysisParams(
+            detection_method="color_region",
+            color_scale=50.0,
+            color_sigma=0.5,
+            color_min_size=10,
+        )
+        analyzer.segment_by_color()
+        assert analyzer.binary_image is not None
+        assert analyzer.binary_image.dtype == np.uint8
+        assert set(np.unique(analyzer.binary_image)).issubset({0, 255})
+        assert analyzer.labeled_grains is not None
+
+    def test_segment_detects_four_color_regions(
+        self, analyzer: GrainAnalyzer, tmp_path: Path
+    ) -> None:
+        path = self._make_color_quadrant_image(tmp_path)
+        analyzer.load_image(path)
+        analyzer.params = AnalysisParams(
+            detection_method="color_region",
+            color_scale=50.0,
+            color_sigma=0.5,
+            color_min_size=10,
+        )
+        analyzer.segment_by_color()
+        n_grains = int(analyzer.labeled_grains.max())
+        assert n_grains >= 4, f"Expected ≥4 color regions, got {n_grains}"
+
+    def test_segment_without_load_raises(self, analyzer: GrainAnalyzer) -> None:
+        with pytest.raises(RuntimeError):
+            analyzer.segment_by_color()
+
+
+# ---------------------------------------------------------------------------
+# get_grain_statistics
+# ---------------------------------------------------------------------------
+
+class TestGetGrainStatistics:
+    def _fast_params(self) -> AnalysisParams:
+        return AnalysisParams(
+            invert_grayscale=False,
+            denoise_h=0.1, denoise_patch=3, denoise_search=7,
+            sharpen_radius=0, sharpen_amount=0.0,
+            threshold_method="global_threshold",
+            threshold_value=100,
+            morph_close_radius=0, morph_open_radius=0,
+            min_feature_size=1, max_hole_size=1,
+            min_grain_area=5, exclude_edge_grains=False,
+        )
+
+    def test_empty_before_analysis(self, analyzer: GrainAnalyzer) -> None:
+        assert analyzer.get_grain_statistics() == {}
+
+    def test_statistics_keys_present(
+        self, analyzer: GrainAnalyzer, synthetic_image: Path
+    ) -> None:
+        analyzer.load_image(synthetic_image)
+        analyzer.params = self._fast_params()
+        analyzer.segment_image()
+        analyzer.measure_grain_areas()
+        stats = analyzer.get_grain_statistics()
+        assert stats, "Pipeline must produce grain statistics"
+        assert {"count", "mean_area_px", "std_area_px", "mean_diam_px"}.issubset(stats.keys())
+        assert stats["count"] > 0
+        assert stats["mean_area_px"] > 0
+
+    def test_statistics_with_scale(
+        self, analyzer: GrainAnalyzer, synthetic_image: Path
+    ) -> None:
+        analyzer.load_image(synthetic_image)
+        params = self._fast_params()
+        params.pixels_per_um = 5.0
+        analyzer.params = params
+        analyzer.segment_image()
+        analyzer.measure_grain_areas()
+        stats = analyzer.get_grain_statistics()
+        if stats.get("count", 0) > 0:
+            assert stats["mean_area_um2"] is not None
+            assert stats["mean_diam_um"] is not None
+
+
+# ---------------------------------------------------------------------------
+# run_segmentation / run_measurement dispatchers
+# ---------------------------------------------------------------------------
+
+class TestDispatchers:
+    def _fast_threshold_params(self) -> AnalysisParams:
+        return AnalysisParams(
+            detection_method="threshold",
+            invert_grayscale=False,
+            denoise_h=0.1, denoise_patch=3, denoise_search=7,
+            sharpen_radius=0, sharpen_amount=0.0,
+            threshold_value=100,
+            morph_close_radius=0, morph_open_radius=0,
+            min_feature_size=1, max_hole_size=1,
+            min_grain_area=5, exclude_edge_grains=False,
+            line_spacing=20, n_theta_steps=1,
+        )
+
+    def test_run_segmentation_threshold_mode(
+        self, analyzer: GrainAnalyzer, synthetic_image: Path
+    ) -> None:
+        analyzer.load_image(synthetic_image)
+        params = self._fast_threshold_params()
+        binary = analyzer.run_segmentation(params)
+        assert binary is not None
+        assert binary.dtype == np.uint8
+        assert analyzer.binary_image is binary
+
+    def test_run_segmentation_color_mode(
+        self, analyzer: GrainAnalyzer, tmp_path: Path
+    ) -> None:
+        import cv2
+        img = np.zeros((120, 120, 3), dtype=np.uint8)
+        img[:60, :60] = [200, 50, 50]
+        img[:60, 60:] = [50, 200, 50]
+        img[60:, :60] = [50, 50, 200]
+        img[60:, 60:] = [200, 200, 50]
+        path = tmp_path / "color.png"
+        cv2.imwrite(str(path), img)
+
+        analyzer.load_image(path)
+        params = AnalysisParams(
+            detection_method="color_region",
+            color_scale=50.0, color_sigma=0.5, color_min_size=10,
+        )
+        binary = analyzer.run_segmentation(params)
+        assert binary is not None
+        assert analyzer.labeled_grains is not None
+
+    def test_run_measurement_returns_two_dataframes(
+        self, analyzer: GrainAnalyzer, synthetic_image: Path
+    ) -> None:
+        import polars as pl
+        analyzer.load_image(synthetic_image)
+        params = self._fast_threshold_params()
+        analyzer.run_segmentation(params)
+        chord_df, grain_df = analyzer.run_measurement(params)
+        assert isinstance(chord_df, pl.DataFrame)
+        assert isinstance(grain_df, pl.DataFrame)
+
+
+# ---------------------------------------------------------------------------
+# scale_detector
+# ---------------------------------------------------------------------------
+
+SCALE_SAMPLE = SAMPLE_DIR / "20260408_C2600-06tx200_s.jpg"
+
+
+class TestScaleDetector:
+    def test_scale_bar_detected_on_sample(self) -> None:
+        if not SCALE_SAMPLE.exists():
+            pytest.skip(f"Scale bar sample not found: {SCALE_SAMPLE}")
+        sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+        from scale_detector import detect_scale_bar, compute_pixels_per_um_from_bar
+        import cv2
+        img = cv2.imread(str(SCALE_SAMPLE))
+        assert img is not None
+        result = detect_scale_bar(img)
+        # Bar line must always be found
+        assert result.bar_x1 < result.bar_x2, "Bar x-coordinates not found"
+        assert result.bar_length_px > 0
+        # If OCR succeeded, pixels_per_um must be in a plausible range
+        if result.pixels_per_um is not None:
+            assert 0.01 <= result.pixels_per_um <= 1000.0, (
+                f"pixels_per_um out of plausible range: {result.pixels_per_um}"
+            )
+        # Verify compute_pixels_per_um_from_bar with known value (200µm bar = 195px → ~0.975 px/µm)
+        ppu = compute_pixels_per_um_from_bar(result.bar_length_px, 200.0, "µm")
+        assert 0.5 <= ppu <= 2.0, f"Expected ~0.975 px/µm, got {ppu}"
+
+    def test_bar_coords_within_image(self) -> None:
+        if not SCALE_SAMPLE.exists():
+            pytest.skip(f"Scale bar sample not found: {SCALE_SAMPLE}")
+        sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+        from scale_detector import detect_scale_bar
+        import cv2
+        img = cv2.imread(str(SCALE_SAMPLE))
+        h, w = img.shape[:2]
+        result = detect_scale_bar(img)
+        assert 0 <= result.bar_x1 < w
+        assert 0 < result.bar_x2 <= w
+        assert 0 <= result.bar_y < h
