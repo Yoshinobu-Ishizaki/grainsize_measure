@@ -208,9 +208,15 @@ class GrainAnalyzer:
 
         from skimage.segmentation import felzenszwalb, find_boundaries
 
+        def _prog(label: str, current: int, total: int = 4) -> None:
+            if progress_cb:
+                progress_cb(label, current, total)
+
         p = self.params
+        _prog("(1/4) BGR→RGB変換中...", 0)
         rgb = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB)
 
+        _prog("(2/4) Felzenszwalb セグメンテーション中...", 1)
         segments = felzenszwalb(
             rgb,
             scale=p.color_scale,
@@ -218,6 +224,7 @@ class GrainAnalyzer:
             min_size=p.color_min_size,
         )
 
+        _prog("(3/4) 粒界検出中...", 2)
         # 1-indexed label map compatible with regionprops
         self.labeled_grains = (segments + 1).astype(np.int32)
 
@@ -226,10 +233,13 @@ class GrainAnalyzer:
         self.binary_image = (boundary.astype(np.uint8) * 255)
 
         if p.color_morph_close_radius > 0:
+            _prog("(4/4) モルフォロジー クロージング中...", 3)
             self.binary_image = sdrv.apply_driver_morph(
                 self.binary_image, [0, 1, p.color_morph_close_radius], quiet_in=True
             )
             self.labeled_grains = None  # force watershed re-run in measure_grain_areas()
+
+        _prog("完了", 4)
 
     def run_segmentation(self, params: AnalysisParams, progress_cb=None, cancel_check=None) -> np.ndarray:
         """Step 1: segment the image (threshold or color mode). Returns binary_image."""
