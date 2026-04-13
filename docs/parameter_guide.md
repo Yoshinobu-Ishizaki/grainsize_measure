@@ -1,32 +1,32 @@
 # Parameter Guide — Grain Size Detection
 
 This guide explains each parameter in the **Analysis Settings** dialog and how it affects grain boundary detection.  
-All example images are cropped to the grain ROI of `tests/sample/c2600p_asis.png`.  
+All example images are cropped to the grain ROI of `tests/sample/20260408_C2600-06tx200.jpg`.  
 Red pixels in the result images indicate detected grain boundaries.
 
 ---
 
 ## Baseline result
 
-The image below shows the result with the optimized baseline parameters for `c2600p_asis.png`.
+The image below shows the result with the optimized baseline parameters for `20260408_C2600-06tx200.jpg`.
 
 ![Baseline](images/baseline.png)
 
 ---
 
-## 0. Detection Mode (`detection_method`)
+## Detection Mode (`detection_method`)
 
 | Value | Description |
 |---|---|
 | `"threshold"` | **(default)** GSAT pipeline — grayscale → threshold → binary boundary image. Use for images with clear dark or bright boundary lines between grains (etched optical micrographs, polished SEM). |
 | `"color_region"` | Felzenszwalb graph-based segmentation — identifies contiguous regions of similar color as individual grains. Use when grains differ in color rather than having visible boundary lines (EBSD maps, strongly etched color micrographs). |
 
-When `"threshold"` is selected, configure parameters in **Section 1**.  
-When `"color_region"` is selected, configure parameters in **Section 0a** below; the GSAT pipeline is bypassed entirely.
+When `"threshold"` is selected, configure parameters in **Segmentation (GSAT pipeline)**.  
+When `"color_region"` is selected, configure parameters in **Color-Region Segmentation** below; the GSAT pipeline is bypassed entirely.
 
 ---
 
-### 0a. Color-Region Segmentation (Felzenszwalb)
+### Color-Region Segmentation (Felzenszwalb)
 
 These parameters apply only when `detection_method = "color_region"`.
 
@@ -81,7 +81,7 @@ After boundaries are computed from the Felzenszwalb result, a morphological clos
 
 ---
 
-## 1. Segmentation (GSAT pipeline)
+## Segmentation (GSAT pipeline)
 
 The segmentation section converts a grayscale image into a binary boundary image through a fixed sequence of steps:
 
@@ -91,7 +91,7 @@ Invert → [CLAHE] → Denoise → Sharpen → Threshold → Morphological ops �
 
 ---
 
-### 1.1 Grayscale Inversion (`invert_grayscale`)
+### Grayscale Inversion (`invert_grayscale`)
 
 | Setting | Value |
 |---|---|
@@ -104,7 +104,7 @@ Invert → [CLAHE] → Denoise → Sharpen → Threshold → Morphological ops �
 
 ---
 
-### 1.1b CLAHE Preprocessing (`clahe_clip_limit`, `clahe_tile_size`)
+### CLAHE Preprocessing (`clahe_clip_limit`, `clahe_tile_size`)
 
 | Setting | Value |
 |---|---|
@@ -128,7 +128,7 @@ Invert → [CLAHE] → Denoise → Sharpen → Threshold → Morphological ops �
 
 ---
 
-### 1.2 Denoising Strength (`denoise_h`)
+### Denoising Strength (`denoise_h`)
 
 | Setting | Value |
 |---|---|
@@ -147,7 +147,7 @@ Start around **0.05 – 0.3** and increase if you see many small speckle boundar
 
 ---
 
-### 1.3 Sharpening (`sharpen_radius`, `sharpen_amount`)
+### Sharpening (`sharpen_radius`, `sharpen_amount`)
 
 | Setting | Value |
 |---|---|
@@ -168,7 +168,7 @@ Start around **0.05 – 0.3** and increase if you see many small speckle boundar
 
 ---
 
-### 1.4 Threshold Method (`threshold_method`)
+### Threshold Method (`threshold_method`)
 
 Three methods are available:
 
@@ -182,7 +182,7 @@ Three methods are available:
 
 ---
 
-#### 1.4a Global Threshold (`threshold_value`)
+#### Global Threshold (`threshold_value`)
 
 | Setting | Value |
 |---|---|
@@ -200,7 +200,7 @@ Use the histogram of your preprocessed image to pick a value at the valley betwe
 
 ---
 
-#### 1.4b Adaptive Threshold Block Size (`adaptive_block_size`)
+#### Adaptive Threshold Block Size (`adaptive_block_size`)
 
 | Setting | Value |
 |---|---|
@@ -218,7 +218,7 @@ Choose a block size roughly **2–4× the typical grain boundary width** in pixe
 
 ---
 
-#### 1.4c Hysteresis Thresholds (`threshold_value` / `threshold_high`)
+#### Hysteresis Thresholds (`threshold_value` / `threshold_high`)
 
 Two thresholds work together:
 
@@ -230,7 +230,7 @@ Two thresholds work together:
 
 ---
 
-### 1.5 Morphological Closing (`morph_close_radius`)
+### Morphological Closing (`morph_close_radius`)
 
 | Setting | Value |
 |---|---|
@@ -248,7 +248,7 @@ Two thresholds work together:
 
 ---
 
-### 1.6 Morphological Opening (`morph_open_radius`)
+### Morphological Opening (`morph_open_radius`)
 
 | Setting | Value |
 |---|---|
@@ -266,7 +266,7 @@ Two thresholds work together:
 
 ---
 
-### 1.7 Minimum Feature Size (`min_feature_size`)
+### Minimum Feature Size (`min_feature_size`)
 
 | Setting | Value |
 |---|---|
@@ -284,18 +284,18 @@ Two thresholds work together:
 
 ---
 
-## 2. Grain Area Measurement (Track B)
+## Grain Area Measurement (Track B)
 
 These parameters control which detected grains are counted and exported.
 
-### 2.1 Minimum Grain Area (`min_grain_area`)
+### Minimum Grain Area (`min_grain_area`)
 
 | Default | 50 px² |
 |---|---|
 
 Grains with fewer pixels than this value are discarded from the results. Increase this to filter out noise-segmented micrograins; decrease it if your material has genuine very small grains.
 
-### 2.2 Exclude Edge Grains (`exclude_edge_grains`)
+### Exclude Edge Grains (`exclude_edge_grains`)
 
 | Default | On |
 |---|---|
@@ -304,7 +304,7 @@ When enabled, any grain whose bounding box touches within `edge_buffer` pixels o
 
 **When to disable:** If your image is carefully cropped to include only complete grains, or if you need maximum grain count and accept the bias.
 
-### 2.3 Edge Buffer (`edge_buffer`)
+### Edge Buffer (`edge_buffer`)
 
 | Default | 5 px |
 |---|---|
@@ -313,18 +313,18 @@ The pixel margin from the image/ROI border used to decide if a grain is an "edge
 
 ---
 
-## 3. Intercept / Chord Measurement (Track A)
+## Intercept / Chord Measurement (Track A)
 
 These parameters control the line grid used for the ASTM E112 intercept method.
 
-### 3.1 Line Spacing (`line_spacing`)
+### Line Spacing (`line_spacing`)
 
 | Default | 20 px |
 |---|---|
 
 Distance in pixels between parallel scan lines. Smaller spacing → more chords measured → better statistics but longer processing. A spacing of **15–30 px** is typical; for very fine grains, reduce to **5–10 px**.
 
-### 3.2 Scan Angles (`theta_start`, `theta_end`, `n_theta_steps`)
+### Scan Angles (`theta_start`, `theta_end`, `n_theta_steps`)
 
 | Default | 0° to 135°, 4 steps |
 |---|---|
@@ -336,7 +336,7 @@ The image is rotated to `n_theta_steps` equally-spaced angles between `theta_sta
 
 ---
 
-## 4. Scale (`pixels_per_um`)
+## Scale (`pixels_per_um`)
 
 | Unit | px / µm |
 |---|---|
@@ -348,7 +348,7 @@ If the auto-detection result looks wrong (verify from the highlighted scale bar 
 
 ---
 
-## 5. Region of Interest (ROI)
+## Region of Interest (ROI)
 
 ### Grain ROI
 Restricts grain counting and centroid filtering to a rectangular sub-area. Use this to exclude the scale bar area or image annotations from the grain analysis.
@@ -360,7 +360,7 @@ Both ROIs can be drawn interactively by clicking **Select ROI** in the settings 
 
 ---
 
-## 6. Parameter Optimizer
+## Parameter Optimizer
 
 The parameter optimizer automatically searches for the combination of segmentation parameters that produces the most valid grain detections for your image.
 
