@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from skimage import segmentation, measure, morphology
+from skimage import segmentation, measure
 from skimage.transform import rotate as ski_rotate
 from scipy import ndimage
 

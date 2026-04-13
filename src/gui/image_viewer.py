@@ -334,7 +334,7 @@ class ImageViewer(QWidget):
         else:
             bytes_per_line = 3 * w
             q_img = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-        pixmap = QPixmap.fromImage(q_img.copy())
+        pixmap = QPixmap.fromImage(q_img)
         self._label.set_pixmap_full(pixmap)
         self.fit_to_window()
 

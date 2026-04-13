@@ -29,7 +29,7 @@ def find_intersections(pixel_arr_in):
 
     cur_sect = np.array([-1, -1])
     cur_sect_count = 0
-    for cc in np.arange(pixel_arr_len-1): 
+    for cc in range(pixel_arr_len - 1):
 
         val_cc = pixel_arr_in[cc] # Current pixel grayscale value
         val_cpo = pixel_arr_in[cc+1] # Next pixel grayscale value
