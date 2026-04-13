@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import tomllib
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -44,227 +45,9 @@ from PyQt6.QtWidgets import (
 )
 
 from analyzer import AnalysisParams, GrainAnalyzer
+from gui.workers import _ImageProcessWorker, _GrainCalcWorker, _ScaleDetectionWorker
+from gui.dialogs import _OptimizerProgressDialog, _CalcProgressDialog
 from gui.viewer_window import ViewerWindow
-
-
-# ---------------------------------------------------------------------------
-# Background workers
-# ---------------------------------------------------------------------------
-
-class _ImageProcessWorker(QObject):
-    finished = pyqtSignal(object)   # binary_rgb ndarray (H, W, 3)
-    error = pyqtSignal(str)
-    cancelled = pyqtSignal()
-    progress = pyqtSignal(str, int, int)   # label, current, total
-
-    def __init__(self, analyzer: GrainAnalyzer, params: AnalysisParams) -> None:
-        super().__init__()
-        self._analyzer = analyzer
-        self._params = params
-        self._cancel_flag = False
-
-    def cancel(self) -> None:
-        self._cancel_flag = True
-
-    def run(self) -> None:
-        try:
-            binary = self._analyzer.run_segmentation(
-                self._params,
-                progress_cb=lambda l, c, t: self.progress.emit(l, c, t),
-                cancel_check=lambda: self._cancel_flag,
-            )
-            binary_rgb = cv2.cvtColor(binary, cv2.COLOR_GRAY2RGB)
-            self.finished.emit(binary_rgb)
-        except GrainAnalyzer.Cancelled:
-            self.cancelled.emit()
-        except Exception as exc:
-            self.error.emit(str(exc))
-
-
-class _GrainCalcWorker(QObject):
-    finished = pyqtSignal(object, object, object)  # chord_df, grain_df, overlay ndarray
-    error = pyqtSignal(str)
-    cancelled = pyqtSignal()
-    progress = pyqtSignal(str, int, int)   # label, current, total
-
-    def __init__(self, analyzer: GrainAnalyzer, params: AnalysisParams) -> None:
-        super().__init__()
-        self._analyzer = analyzer
-        self._params = params
-        self._cancel_flag = False
-
-    def cancel(self) -> None:
-        self._cancel_flag = True
-
-    def run(self) -> None:
-        try:
-            chord_df, grain_df = self._analyzer.run_measurement(
-                self._params,
-                progress_cb=lambda l, c, t: self.progress.emit(l, c, t),
-                cancel_check=lambda: self._cancel_flag,
-            )
-            self.progress.emit("オーバーレイ生成中...", 0, 0)
-            overlay = self._analyzer.render_overlay_image()
-            self.finished.emit(chord_df, grain_df, overlay)
-        except GrainAnalyzer.Cancelled:
-            self.cancelled.emit()
-        except Exception as exc:
-            self.error.emit(str(exc))
-
-
-class _ScaleDetectionWorker(QObject):
-    finished = pyqtSignal(object)  # ScaleBarResult
-    error = pyqtSignal(str)
-
-    def __init__(self, image_bgr: np.ndarray, marker_roi: tuple[int, int, int, int] | None) -> None:
-        super().__init__()
-        self._image_bgr = image_bgr
-        self._marker_roi = marker_roi
-
-    def run(self) -> None:
-        try:
-            from scale_detector import detect_scale_bar  # noqa: PLC0415
-            img = self._image_bgr
-            strip_start = None
-            if self._marker_roi is not None:
-                x, y, w, h = self._marker_roi
-                img = img[y:y + h, x:x + w]
-                strip_start = 0  # entire cropped region is the scale bar area
-            result = detect_scale_bar(img, strip_start=strip_start)
-            self.finished.emit(result)
-        except Exception as exc:
-            self.error.emit(str(exc))
-
-
-# ---------------------------------------------------------------------------
-# Optimizer progress dialog
-# ---------------------------------------------------------------------------
-
-class _OptimizerProgressDialog(QDialog):
-    """Modal progress dialog shown while the parameter optimizer subprocess runs."""
-
-    cancel_requested = pyqtSignal()
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("パラメータ最適化")
-        self.setModal(True)
-        self.setMinimumWidth(420)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
-
-        layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(16, 16, 16, 16)
-
-        self._phase_label = QLabel("フェーズ 1: 初期スキャン中...")
-        layout.addWidget(self._phase_label)
-
-        self._progress_bar = QProgressBar()
-        self._progress_bar.setRange(0, 6)
-        self._progress_bar.setValue(0)
-        self._progress_bar.setTextVisible(True)
-        layout.addWidget(self._progress_bar)
-
-        self._score_label = QLabel("最高スコア: —")
-        layout.addWidget(self._score_label)
-
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        self._cancel_btn = QPushButton("キャンセル")
-        self._cancel_btn.setFixedWidth(100)
-        self._cancel_btn.clicked.connect(self._on_cancel_clicked)
-        btn_layout.addWidget(self._cancel_btn)
-        layout.addLayout(btn_layout)
-
-    def set_phase1_progress(self, n: int, total: int) -> None:
-        self._phase_label.setText(f"フェーズ 1: 初期スキャン ({n}/{total})")
-        self._progress_bar.setRange(0, total)
-        self._progress_bar.setValue(n)
-
-    def set_phase2_start(self, total: int) -> None:
-        self._phase_label.setText(f"フェーズ 2: ランダム探索 (0/{total})")
-        self._progress_bar.setRange(0, total)
-        self._progress_bar.setValue(0)
-
-    def set_phase2_progress(self, n: int, total: int) -> None:
-        self._phase_label.setText(f"フェーズ 2: ランダム探索 ({n}/{total})")
-        self._progress_bar.setValue(n)
-
-    def set_best_score(self, score: float) -> None:
-        self._score_label.setText(f"最高スコア: {score:.2f}")
-
-    def mark_done(self) -> None:
-        try:
-            self._cancel_btn.clicked.disconnect()
-        except RuntimeError:
-            pass
-        self.accept()
-
-    def _on_cancel_clicked(self) -> None:
-        self._cancel_btn.setEnabled(False)
-        self._cancel_btn.setText("キャンセル中...")
-        self.cancel_requested.emit()
-
-    def closeEvent(self, event) -> None:
-        self._on_cancel_clicked()
-        event.ignore()
-
-
-# ---------------------------------------------------------------------------
-# Calculation progress dialog (image processing & grain calc)
-# ---------------------------------------------------------------------------
-
-class _CalcProgressDialog(QDialog):
-    """Non-blocking progress dialog with cancel button for long calculations."""
-
-    cancel_requested = pyqtSignal()
-
-    def __init__(self, title: str, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setModal(True)
-        self.setMinimumWidth(380)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
-
-        layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(16, 16, 16, 16)
-
-        self._step_label = QLabel("準備中...")
-        layout.addWidget(self._step_label)
-
-        self._progress_bar = QProgressBar()
-        self._progress_bar.setRange(0, 0)   # indeterminate until first update
-        self._progress_bar.setTextVisible(True)
-        layout.addWidget(self._progress_bar)
-
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        self._cancel_btn = QPushButton("キャンセル")
-        self._cancel_btn.setFixedWidth(110)
-        self._cancel_btn.clicked.connect(self._on_cancel_clicked)
-        btn_layout.addWidget(self._cancel_btn)
-        layout.addLayout(btn_layout)
-
-    def update_progress(self, label: str, current: int, total: int) -> None:
-        self._step_label.setText(label)
-        self._progress_bar.setRange(0, total)
-        self._progress_bar.setValue(current)
-
-    def mark_done(self) -> None:
-        try:
-            self._cancel_btn.clicked.disconnect()
-        except RuntimeError:
-            pass
-        self.accept()
-
-    def _on_cancel_clicked(self) -> None:
-        self._cancel_btn.setEnabled(False)
-        self._cancel_btn.setText("キャンセル中...")
-        self.cancel_requested.emit()
-
-    def closeEvent(self, event) -> None:
-        event.ignore()  # close only via mark_done() or mark_cancelled()
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +279,14 @@ class _GrainCalcTab(QWidget):
     select_grain_roi_requested = pyqtSignal()
     select_marker_roi_requested = pyqtSignal()
 
+    @contextmanager
+    def _silent_update(self):
+        self._updating_roi = True
+        try:
+            yield
+        finally:
+            self._updating_roi = False
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._updating_roi = False
@@ -701,17 +492,15 @@ class _GrainCalcTab(QWidget):
         return (self.spin_marker_x.value(), self.spin_marker_y.value(), w, h)
 
     def _clear_grain_roi(self) -> None:
-        self._updating_roi = True
-        for sp in (self.spin_grain_x, self.spin_grain_y, self.spin_grain_w, self.spin_grain_h):
-            sp.setValue(0)
-        self._updating_roi = False
+        with self._silent_update():
+            for sp in (self.spin_grain_x, self.spin_grain_y, self.spin_grain_w, self.spin_grain_h):
+                sp.setValue(0)
         self.grain_roi_changed.emit(None)
 
     def _clear_marker_roi(self) -> None:
-        self._updating_roi = True
-        for sp in (self.spin_marker_x, self.spin_marker_y, self.spin_marker_w, self.spin_marker_h):
-            sp.setValue(0)
-        self._updating_roi = False
+        with self._silent_update():
+            for sp in (self.spin_marker_x, self.spin_marker_y, self.spin_marker_w, self.spin_marker_h):
+                sp.setValue(0)
         self.marker_roi_changed.emit(None)
 
     # ------------------------------------------------------------------
@@ -719,20 +508,18 @@ class _GrainCalcTab(QWidget):
     # ------------------------------------------------------------------
 
     def set_grain_roi(self, x: int, y: int, w: int, h: int) -> None:
-        self._updating_roi = True
-        self.spin_grain_x.setValue(x)
-        self.spin_grain_y.setValue(y)
-        self.spin_grain_w.setValue(w)
-        self.spin_grain_h.setValue(h)
-        self._updating_roi = False
+        with self._silent_update():
+            self.spin_grain_x.setValue(x)
+            self.spin_grain_y.setValue(y)
+            self.spin_grain_w.setValue(w)
+            self.spin_grain_h.setValue(h)
 
     def set_marker_roi(self, x: int, y: int, w: int, h: int) -> None:
-        self._updating_roi = True
-        self.spin_marker_x.setValue(x)
-        self.spin_marker_y.setValue(y)
-        self.spin_marker_w.setValue(w)
-        self.spin_marker_h.setValue(h)
-        self._updating_roi = False
+        with self._silent_update():
+            self.spin_marker_x.setValue(x)
+            self.spin_marker_y.setValue(y)
+            self.spin_marker_w.setValue(w)
+            self.spin_marker_h.setValue(h)
 
     # ------------------------------------------------------------------
     # Params get / set
@@ -1208,6 +995,7 @@ class SettingsDialog(QMainWindow):
         self._optimizer_proc.setWorkingDirectory(str(repo_root))
         self._optimizer_proc.finished.connect(self._on_optimizer_finished)
         self._optimizer_proc.readyReadStandardOutput.connect(self._on_optimizer_stdout)
+        self._optimizer_proc.readyReadStandardError.connect(self._on_optimizer_stderr)
         self._optimizer_proc.start("uv", [
             "run", str(script_path),
             "--params", str(input_path),
@@ -1229,6 +1017,14 @@ class SettingsDialog(QMainWindow):
         while "\n" in self._optimizer_line_buffer:
             line, self._optimizer_line_buffer = self._optimizer_line_buffer.split("\n", 1)
             self._parse_optimizer_line(line.rstrip("\r"))
+
+    def _on_optimizer_stderr(self) -> None:
+        if self._optimizer_proc is None:
+            return
+        raw = self._optimizer_proc.readAllStandardError()
+        text = bytes(raw).decode("utf-8", errors="replace").strip()
+        if text:
+            self.statusBar().showMessage(f"最適化エラー: {text[:120]}", 8000)
 
     def _parse_optimizer_line(self, line: str) -> None:
         dlg = self._optimizer_progress_dlg
