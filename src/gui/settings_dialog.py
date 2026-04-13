@@ -2,7 +2,18 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import tomllib
 from pathlib import Path
+
+
+def _read_version() -> str:
+    """Read version string from pyproject.toml at the project root."""
+    try:
+        toml_path = Path(__file__).parent.parent.parent / "pyproject.toml"
+        with open(toml_path, "rb") as f:
+            return tomllib.load(f)["project"]["version"]
+    except Exception:
+        return "?.?.?"
 
 import cv2
 import numpy as np
@@ -857,7 +868,7 @@ class SettingsDialog(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("結晶粒サイズ測定 v0.14.0")
+        self.setWindowTitle(f"結晶粒サイズ測定 v{_read_version()}")
         self.setMinimumWidth(380)
 
         self._analyzer = GrainAnalyzer()
@@ -876,6 +887,7 @@ class SettingsDialog(QMainWindow):
         self._processed_binary_rgb: np.ndarray | None = None
         self._scale_bar_result = None
         self._auto_run_grain_calc: bool = False
+        self._last_dir: str = ""
         self._process_dlg: _CalcProgressDialog | None = None
         self._calc_dlg: _CalcProgressDialog | None = None
         self._optimizer_proc: QProcess | None = None
@@ -1011,11 +1023,12 @@ class SettingsDialog(QMainWindow):
 
     def _open_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "画像を開く", "",
+            self, "画像を開く", self._last_dir,
             "画像ファイル (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;すべてのファイル (*)",
         )
         if not path:
             return
+        self._last_dir = str(Path(path).parent)
         self._load_image_path(path)
 
     def _load_image_path(self, path: str) -> None:
@@ -1046,10 +1059,11 @@ class SettingsDialog(QMainWindow):
 
     def _open_params(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "パラメータを開く", "", "JSON ファイル (*.json);;すべてのファイル (*)"
+            self, "パラメータを開く", self._last_dir, "JSON ファイル (*.json);;すべてのファイル (*)"
         )
         if not path:
             return
+        self._last_dir = str(Path(path).parent)
         self._load_params_from_path(path)
 
     def _load_params_from_path(self, path: str) -> None:
@@ -1132,11 +1146,13 @@ class SettingsDialog(QMainWindow):
 
     def _save_params(self) -> None:
         default_name = f"{self._image_stem}_params.json" if self._image_stem else "params.json"
+        initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "パラメータを保存", default_name, "JSON ファイル (*.json);;すべてのファイル (*)"
+            self, "パラメータを保存", initial, "JSON ファイル (*.json);;すべてのファイル (*)"
         )
         if not path:
             return
+        self._last_dir = str(Path(path).parent)
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self._collect_params_dict(), f, indent=2, ensure_ascii=False)
@@ -1590,12 +1606,14 @@ class SettingsDialog(QMainWindow):
 
     def _save_image(self) -> None:
         default_name = f"{self._image_stem}_overlay.png" if self._image_stem else "grain_overlay.png"
+        initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "画像を保存", default_name,
+            self, "画像を保存", initial,
             "PNG ファイル (*.png);;JPEG ファイル (*.jpg);;すべてのファイル (*)",
         )
         if not path:
             return
+        self._last_dir = str(Path(path).parent)
         try:
             self._analyzer.save_labeled_image(path)
             self.statusBar().showMessage(f"画像を保存しました: {path}", 5000)
@@ -1604,12 +1622,14 @@ class SettingsDialog(QMainWindow):
 
     def _export_chord_csv(self) -> None:
         default_name = f"{self._image_stem}_chord.csv" if self._image_stem else "chord_lengths.csv"
+        initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "コード長CSVを保存", default_name,
+            self, "コード長CSVを保存", initial,
             "CSV ファイル (*.csv);;すべてのファイル (*)",
         )
         if not path:
             return
+        self._last_dir = str(Path(path).parent)
         try:
             self._analyzer.save_chord_csv(path)
             self.statusBar().showMessage(f"コード長CSVを保存しました: {path}", 5000)
@@ -1618,12 +1638,14 @@ class SettingsDialog(QMainWindow):
 
     def _export_grain_csv(self) -> None:
         default_name = f"{self._image_stem}_grain.csv" if self._image_stem else "grain_areas.csv"
+        initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "粒子面積CSVを保存", default_name,
+            self, "粒子面積CSVを保存", initial,
             "CSV ファイル (*.csv);;すべてのファイル (*)",
         )
         if not path:
             return
+        self._last_dir = str(Path(path).parent)
         try:
             self._analyzer.save_grain_csv(path)
             self.statusBar().showMessage(f"粒子面積CSVを保存しました: {path}", 5000)
@@ -1632,12 +1654,14 @@ class SettingsDialog(QMainWindow):
 
     def _export_result_csv(self) -> None:
         default_name = f"{self._image_stem}_result.csv" if self._image_stem else "result.csv"
+        initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "結果サマリーCSVを保存", default_name,
+            self, "結果サマリーCSVを保存", initial,
             "CSV ファイル (*.csv);;すべてのファイル (*)",
         )
         if not path:
             return
+        self._last_dir = str(Path(path).parent)
         try:
             self._analyzer.save_result_csv(path)
             self.statusBar().showMessage(f"結果サマリーCSVを保存しました: {path}", 5000)
