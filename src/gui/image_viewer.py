@@ -232,6 +232,7 @@ class ImageViewer(QWidget):
             q_img = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
         pixmap = QPixmap.fromImage(q_img.copy())
         self._label.set_pixmap_full(pixmap)
+        self.fit_to_window()
 
     def clear(self) -> None:
         self._label._full_pixmap = None
@@ -262,7 +263,7 @@ class ImageViewer(QWidget):
         vh = self._scroll.viewport().height()
         iw = self._label._full_pixmap.width()
         ih = self._label._full_pixmap.height()
-        if iw == 0 or ih == 0:
+        if iw == 0 or ih == 0 or vw == 0 or vh == 0:
             return
         self._zoom_factor = min(vw / iw, vh / ih)
         self._label.set_zoom(self._zoom_factor)

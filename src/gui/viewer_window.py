@@ -59,10 +59,12 @@ class ViewerWindow(QMainWindow):
     def show_processed(self, rgb: np.ndarray) -> None:
         self._viewer_processed.set_image(rgb)
         self._tabs.setCurrentIndex(1)
+        self._viewer_processed.fit_to_window()
 
     def show_overlay(self, rgb: np.ndarray) -> None:
         self._viewer_overlay.set_image(rgb)
         self._tabs.setCurrentIndex(2)
+        self._viewer_overlay.fit_to_window()
 
     def clear_processed(self) -> None:
         self._viewer_processed.clear()
@@ -79,12 +81,12 @@ class ViewerWindow(QMainWindow):
             viewer.set_mode(mode)
 
     def set_grain_roi(self, roi: tuple[int, int, int, int] | None) -> None:
-        # Original tab shows the unmodified image — no ROI rectangles there
-        self._viewer_processed.set_grain_roi(roi)
+        for viewer in (self._viewer_original, self._viewer_processed, self._viewer_overlay):
+            viewer.set_grain_roi(roi)
 
     def set_marker_roi(self, roi: tuple[int, int, int, int] | None) -> None:
-        # Original tab shows the unmodified image — no ROI rectangles there
-        self._viewer_processed.set_marker_roi(roi)
+        for viewer in (self._viewer_original, self._viewer_processed, self._viewer_overlay):
+            viewer.set_marker_roi(roi)
 
     # ------------------------------------------------------------------
     # Slots

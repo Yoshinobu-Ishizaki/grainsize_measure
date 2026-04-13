@@ -73,6 +73,9 @@ class AnalysisParams:
 
 
 class GrainAnalyzer:
+    class Cancelled(Exception):
+        """Raised inside worker methods when the user requests cancellation."""
+
     def __init__(self) -> None:
         self.image_path: Path | None = None
         self.original_image: np.ndarray | None = None   # BGR (3-channel), uint8
@@ -105,15 +108,24 @@ class GrainAnalyzer:
         self.chord_df = None
         self.grain_df = None
 
-    def segment_image(self) -> None:
+    def segment_image(self, progress_cb=None, cancel_check=None) -> None:
         """Run GSAT segmentation pipeline → binary image (255=boundary, 0=interior)."""
         if self.gray_image is None:
             raise RuntimeError("load_image() を先に呼び出してください。")
+
+        def _prog(label: str, step: int, total: int = 7) -> None:
+            if progress_cb:
+                progress_cb(label, step, total)
+
+        def _check() -> None:
+            if cancel_check and cancel_check():
+                raise GrainAnalyzer.Cancelled()
 
         p = self.params
         img = self.gray_image.copy()
 
         # 0. Optionally invert (for optical images where boundaries are dark)
+        _prog("輝度調整中...", 0)
         if p.invert_grayscale:
             img = 255 - img
 
@@ -124,18 +136,24 @@ class GrainAnalyzer:
                 tileGridSize=(p.clahe_tile_size, p.clahe_tile_size)
             )
             img = clahe.apply(img)
+        _check()
 
         # 1. Denoise
+        _prog("ノイズ除去中...", 1)
         img = sdrv.apply_driver_denoise(
             img, ["nl_means", p.denoise_h, p.denoise_patch, p.denoise_search], quiet_in=True
         )
+        _check()
 
         # 2. Sharpen
+        _prog("シャープ化中...", 2)
         img = sdrv.apply_driver_sharpen(
             img, ["unsharp_mask", p.sharpen_radius, p.sharpen_amount], quiet_in=True
         )
+        _check()
 
         # 3. Threshold → binary
+        _prog("二値化中...", 3)
         if p.threshold_method == "global_threshold":
             img = sdrv.apply_driver_thresholding(
                 img, ["global_threshold", p.threshold_value], quiet_in=True
@@ -148,30 +166,37 @@ class GrainAnalyzer:
             img = sdrv.apply_driver_thresholding(
                 img, ["adaptive_threshold", p.adaptive_block_size, p.adaptive_offset], quiet_in=True
             )
+        _check()
 
         # 4. Morphological closing (fill gaps in boundaries); skipped when radius=0
+        _prog("モルフォロジー処理中...", 4)
         if p.morph_close_radius > 0:
             img = sdrv.apply_driver_morph(img, [0, 1, p.morph_close_radius], quiet_in=True)
 
         # 5. Morphological opening (remove isolated noise); skipped when radius=0
         if p.morph_open_radius > 0:
             img = sdrv.apply_driver_morph(img, [1, 1, p.morph_open_radius], quiet_in=True)
+        _check()
 
         # 6. Remove small features / fill small holes
-        # apply_driver_del_features: ["scikit", max_hole_sz, min_feat_sz]
+        _prog("特徴除去中...", 5)
         img = sdrv.apply_driver_del_features(
             img, ["scikit", p.max_hole_size, p.min_feature_size], quiet_in=True
         )
+        _check()
 
         # 7. Optional skeletonization (e.g. for SEM polished samples)
+        _prog("骨格化中...", 6)
         if p.skeletonize:
             from skimage.morphology import skeletonize as ski_skeletonize
             from skimage.util import img_as_bool, img_as_ubyte as _ubyte
             img = _ubyte(ski_skeletonize(img_as_bool(img)))
+        _check()
 
+        _prog("完了", 7)
         self.binary_image = img
 
-    def segment_by_color(self) -> None:
+    def segment_by_color(self, progress_cb=None, cancel_check=None) -> None:
         """Color-region segmentation via felzenszwalb graph-based algorithm.
 
         Sets self.binary_image (uint8, 255=boundary, 0=interior) and
@@ -206,23 +231,23 @@ class GrainAnalyzer:
             )
             self.labeled_grains = None  # force watershed re-run in measure_grain_areas()
 
-    def run_segmentation(self, params: AnalysisParams) -> np.ndarray:
+    def run_segmentation(self, params: AnalysisParams, progress_cb=None, cancel_check=None) -> np.ndarray:
         """Step 1: segment the image (threshold or color mode). Returns binary_image."""
         self.params = params
         if params.detection_method == "color_region":
-            self.segment_by_color()
+            self.segment_by_color(progress_cb=progress_cb, cancel_check=cancel_check)
         else:
-            self.segment_image()
+            self.segment_image(progress_cb=progress_cb, cancel_check=cancel_check)
         return self.binary_image  # type: ignore[return-value]
 
-    def run_measurement(self, params: AnalysisParams) -> tuple[pl.DataFrame, pl.DataFrame]:
+    def run_measurement(self, params: AnalysisParams, progress_cb=None, cancel_check=None) -> tuple[pl.DataFrame, pl.DataFrame]:
         """Step 2: assumes binary_image already set by run_segmentation(). Measures only."""
         self.params = params
-        chord_df = self.measure_intercepts()
-        grain_df = self.measure_grain_areas()
+        chord_df = self.measure_intercepts(progress_cb=progress_cb, cancel_check=cancel_check)
+        grain_df = self.measure_grain_areas(progress_cb=progress_cb, cancel_check=cancel_check)
         return chord_df, grain_df
 
-    def measure_intercepts(self) -> pl.DataFrame:
+    def measure_intercepts(self, progress_cb=None, cancel_check=None) -> pl.DataFrame:
         """Track A: GSAT intercept method → chord length DataFrame."""
         if self.binary_image is None:
             raise RuntimeError("segment_image() を先に呼び出してください。")
@@ -237,6 +262,8 @@ class GrainAnalyzer:
         else:
             thetas = np.linspace(p.theta_start, p.theta_end, p.n_theta_steps)
 
+        total_thetas = len(thetas)
+
         # Optionally pad to avoid clipping during rotation (GSAT-compatible)
         if p.pad_for_rotation:
             circle_min_diameter = int(np.ceil(np.sqrt(height ** 2 + width ** 2)))
@@ -245,7 +272,11 @@ class GrainAnalyzer:
         else:
             work_img = self.binary_image
 
-        for theta in thetas:
+        for theta_idx, theta in enumerate(thetas):
+            if cancel_check and cancel_check():
+                raise GrainAnalyzer.Cancelled()
+            if progress_cb:
+                progress_cb(f"コード計測中... (θ={theta:.1f}°)", theta_idx, total_thetas)
             # Rotate image so we can scan horizontal lines
             if abs(theta) < 0.1:
                 rotated = work_img
@@ -299,22 +330,34 @@ class GrainAnalyzer:
         )
         return self.chord_df
 
-    def measure_grain_areas(self) -> pl.DataFrame:
+    def measure_grain_areas(self, progress_cb=None, cancel_check=None) -> pl.DataFrame:
         """Track B: Watershed → regionprops → per-grain area DataFrame."""
         if self.binary_image is None:
             raise RuntimeError("segment_image() を先に呼び出してください。")
 
         p = self.params
 
+        # Grain calc steps come after intercept steps; use a fixed offset of 4 sub-steps.
+        def _prog(label: str, step: int) -> None:
+            if progress_cb:
+                progress_cb(label, step, 4)
+
+        def _check() -> None:
+            if cancel_check and cancel_check():
+                raise GrainAnalyzer.Cancelled()
+
         # Color-region mode: labeled_grains already set by segment_by_color() — skip watershed
         if self.labeled_grains is None:
             # GSAT binary: 255=boundary → invert so grain interior=True for distance transform
             binary_grains = self.binary_image == 0  # True where grain interior
 
+            _prog("距離変換中...", 0)
             distance = ndimage.distance_transform_edt(binary_grains)
+            _check()
 
             # One marker per connected interior component — guarantees no grain is
             # ever split by watershed regardless of grain size or shape.
+            _prog("領域ラベリング中...", 1)
             labeled_components = measure.label(binary_grains)
             markers_labeled = np.zeros_like(labeled_components)
             for cid in range(1, labeled_components.max() + 1):
@@ -323,9 +366,13 @@ class GrainAnalyzer:
                 if local_dist.max() > 0:
                     peak = np.unravel_index(local_dist.argmax(), local_dist.shape)
                     markers_labeled[peak] = cid
+            _check()
 
+            _prog("ウォーターシェッド中...", 2)
             self.labeled_grains = segmentation.watershed(-distance, markers_labeled, mask=binary_grains)
+            _check()
 
+        _prog("粒子特性計算中...", 3)
         height, width = self.labeled_grains.shape
         properties = measure.regionprops(self.labeled_grains)
 

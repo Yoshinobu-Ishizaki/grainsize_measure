@@ -9,7 +9,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 # On Wayland, QWindow.move() is a compositor-controlled no-op.
 # Force XCB (X11/XWayland) so that explicit window positioning works.
-os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+# Skip on Windows — xcb is Linux-only; the windows plugin is used automatically.
+if sys.platform != "win32":
+    os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
 from PyQt6.QtWidgets import QApplication
 from gui.settings_dialog import SettingsDialog

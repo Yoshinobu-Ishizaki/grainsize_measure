@@ -43,16 +43,28 @@ from gui.viewer_window import ViewerWindow
 class _ImageProcessWorker(QObject):
     finished = pyqtSignal(object)   # binary ndarray
     error = pyqtSignal(str)
+    cancelled = pyqtSignal()
+    progress = pyqtSignal(str, int, int)   # label, current, total
 
     def __init__(self, analyzer: GrainAnalyzer, params: AnalysisParams) -> None:
         super().__init__()
         self._analyzer = analyzer
         self._params = params
+        self._cancel_flag = False
+
+    def cancel(self) -> None:
+        self._cancel_flag = True
 
     def run(self) -> None:
         try:
-            binary = self._analyzer.run_segmentation(self._params)
+            binary = self._analyzer.run_segmentation(
+                self._params,
+                progress_cb=lambda l, c, t: self.progress.emit(l, c, t),
+                cancel_check=lambda: self._cancel_flag,
+            )
             self.finished.emit(binary)
+        except GrainAnalyzer.Cancelled:
+            self.cancelled.emit()
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -60,17 +72,30 @@ class _ImageProcessWorker(QObject):
 class _GrainCalcWorker(QObject):
     finished = pyqtSignal(object, object, object)  # chord_df, grain_df, overlay ndarray
     error = pyqtSignal(str)
+    cancelled = pyqtSignal()
+    progress = pyqtSignal(str, int, int)   # label, current, total
 
     def __init__(self, analyzer: GrainAnalyzer, params: AnalysisParams) -> None:
         super().__init__()
         self._analyzer = analyzer
         self._params = params
+        self._cancel_flag = False
+
+    def cancel(self) -> None:
+        self._cancel_flag = True
 
     def run(self) -> None:
         try:
-            chord_df, grain_df = self._analyzer.run_measurement(self._params)
+            chord_df, grain_df = self._analyzer.run_measurement(
+                self._params,
+                progress_cb=lambda l, c, t: self.progress.emit(l, c, t),
+                cancel_check=lambda: self._cancel_flag,
+            )
+            self.progress.emit("オーバーレイ生成中...", 0, 0)
             overlay = self._analyzer.render_overlay_image()
             self.finished.emit(chord_df, grain_df, overlay)
+        except GrainAnalyzer.Cancelled:
+            self.cancelled.emit()
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -171,6 +196,63 @@ class _OptimizerProgressDialog(QDialog):
     def closeEvent(self, event) -> None:
         self._on_cancel_clicked()
         event.ignore()
+
+
+# ---------------------------------------------------------------------------
+# Calculation progress dialog (image processing & grain calc)
+# ---------------------------------------------------------------------------
+
+class _CalcProgressDialog(QDialog):
+    """Non-blocking progress dialog with cancel button for long calculations."""
+
+    cancel_requested = pyqtSignal()
+
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setMinimumWidth(380)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        self._step_label = QLabel("準備中...")
+        layout.addWidget(self._step_label)
+
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setRange(0, 0)   # indeterminate until first update
+        self._progress_bar.setTextVisible(True)
+        layout.addWidget(self._progress_bar)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        self._cancel_btn = QPushButton("キャンセル")
+        self._cancel_btn.setFixedWidth(110)
+        self._cancel_btn.clicked.connect(self._on_cancel_clicked)
+        btn_layout.addWidget(self._cancel_btn)
+        layout.addLayout(btn_layout)
+
+    def update_progress(self, label: str, current: int, total: int) -> None:
+        self._step_label.setText(label)
+        self._progress_bar.setRange(0, total)
+        self._progress_bar.setValue(current)
+
+    def mark_done(self) -> None:
+        try:
+            self._cancel_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+        self.accept()
+
+    def _on_cancel_clicked(self) -> None:
+        self._cancel_btn.setEnabled(False)
+        self._cancel_btn.setText("キャンセル中...")
+        self.cancel_requested.emit()
+
+    def closeEvent(self, event) -> None:
+        event.ignore()  # close only via mark_done() or mark_cancelled()
 
 
 # ---------------------------------------------------------------------------
@@ -794,6 +876,8 @@ class SettingsDialog(QMainWindow):
         self._processed_binary_rgb: np.ndarray | None = None
         self._scale_bar_result = None
         self._auto_run_grain_calc: bool = False
+        self._process_dlg: _CalcProgressDialog | None = None
+        self._calc_dlg: _CalcProgressDialog | None = None
         self._optimizer_proc: QProcess | None = None
         self._optimizer_out_path: Path | None = None
         self._optimizer_progress_dlg: _OptimizerProgressDialog | None = None
@@ -1230,21 +1314,36 @@ class SettingsDialog(QMainWindow):
         self._process_worker = _ImageProcessWorker(self._analyzer, params)
         self._process_worker.moveToThread(self._process_thread)
 
+        self._process_dlg = _CalcProgressDialog("画像処理", self)
+        self._process_dlg.cancel_requested.connect(self._cancel_image_process)
+        self._process_worker.progress.connect(self._process_dlg.update_progress)
+
         self._process_thread.started.connect(self._process_worker.run)
         self._process_worker.finished.connect(self._on_image_process_done)
+        self._process_worker.cancelled.connect(self._on_image_process_cancelled)
         self._process_worker.error.connect(self._on_image_process_error)
         self._process_worker.finished.connect(self._process_thread.quit)
+        self._process_worker.cancelled.connect(self._process_thread.quit)
         self._process_worker.error.connect(self._process_thread.quit)
         self._process_thread.finished.connect(self._process_thread.deleteLater)
         self._process_thread.finished.connect(self._on_process_thread_finished)
 
         self._process_thread.start()
+        self._process_dlg.show()
+
+    def _cancel_image_process(self) -> None:
+        if self._process_worker is not None:
+            self._process_worker.cancel()
 
     def _on_process_thread_finished(self) -> None:
         self._process_thread = None
         self._process_worker = None
 
     def _on_image_process_done(self, binary: np.ndarray) -> None:
+        if self._process_dlg is not None:
+            self._process_dlg.mark_done()
+            self._process_dlg = None
+
         # Convert binary (0/255) to RGB for display
         binary_rgb = cv2.cvtColor(binary, cv2.COLOR_GRAY2RGB)
         self._processed_binary_rgb = binary_rgb
@@ -1260,7 +1359,17 @@ class SettingsDialog(QMainWindow):
             self._auto_run_grain_calc = False
             self._grain_calc()
 
+    def _on_image_process_cancelled(self) -> None:
+        if self._process_dlg is not None:
+            self._process_dlg.mark_done()
+            self._process_dlg = None
+        self.statusBar().showMessage("画像処理をキャンセルしました。", 4000)
+        self._update_button_states()
+
     def _on_image_process_error(self, message: str) -> None:
+        if self._process_dlg is not None:
+            self._process_dlg.mark_done()
+            self._process_dlg = None
         QMessageBox.critical(self, "画像処理エラー", message)
         self.statusBar().showMessage("画像処理中にエラーが発生しました。", 5000)
         self._update_button_states()
@@ -1278,21 +1387,36 @@ class SettingsDialog(QMainWindow):
         self._calc_worker = _GrainCalcWorker(self._analyzer, params)
         self._calc_worker.moveToThread(self._calc_thread)
 
+        self._calc_dlg = _CalcProgressDialog("粒子計算", self)
+        self._calc_dlg.cancel_requested.connect(self._cancel_grain_calc)
+        self._calc_worker.progress.connect(self._calc_dlg.update_progress)
+
         self._calc_thread.started.connect(self._calc_worker.run)
         self._calc_worker.finished.connect(self._on_grain_calc_done)
+        self._calc_worker.cancelled.connect(self._on_grain_calc_cancelled)
         self._calc_worker.error.connect(self._on_grain_calc_error)
         self._calc_worker.finished.connect(self._calc_thread.quit)
+        self._calc_worker.cancelled.connect(self._calc_thread.quit)
         self._calc_worker.error.connect(self._calc_thread.quit)
         self._calc_thread.finished.connect(self._calc_thread.deleteLater)
         self._calc_thread.finished.connect(self._on_calc_thread_finished)
 
         self._calc_thread.start()
+        self._calc_dlg.show()
+
+    def _cancel_grain_calc(self) -> None:
+        if self._calc_worker is not None:
+            self._calc_worker.cancel()
 
     def _on_calc_thread_finished(self) -> None:
         self._calc_thread = None
         self._calc_worker = None
 
     def _on_grain_calc_done(self, chord_df, grain_df, overlay: np.ndarray) -> None:
+        if self._calc_dlg is not None:
+            self._calc_dlg.mark_done()
+            self._calc_dlg = None
+
         self._viewer.show_overlay(overlay)
 
         ppu = self._tab_calc.spin_pixels_per_um.value()
@@ -1311,7 +1435,17 @@ class SettingsDialog(QMainWindow):
         self.statusBar().showMessage("粒子計算が完了しました。", 5000)
         self._tab_widget.setCurrentIndex(2)  # switch to save/export tab
 
+    def _on_grain_calc_cancelled(self) -> None:
+        if self._calc_dlg is not None:
+            self._calc_dlg.mark_done()
+            self._calc_dlg = None
+        self.statusBar().showMessage("粒子計算をキャンセルしました。", 4000)
+        self._update_button_states()
+
     def _on_grain_calc_error(self, message: str) -> None:
+        if self._calc_dlg is not None:
+            self._calc_dlg.mark_done()
+            self._calc_dlg = None
         QMessageBox.critical(self, "粒子計算エラー", message)
         self.statusBar().showMessage("粒子計算中にエラーが発生しました。", 5000)
         self._update_button_states()
