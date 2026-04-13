@@ -886,6 +886,8 @@ class SettingsDialog(QMainWindow):
         self._original_rgb: np.ndarray | None = None
         self._processed_binary_rgb: np.ndarray | None = None
         self._scale_bar_result = None
+        self._last_scale_bar_value: float = 50.0
+        self._last_scale_bar_unit: str = "µm"
         self._auto_run_grain_calc: bool = False
         self._last_dir: str = ""
         self._process_dlg: _CalcProgressDialog | None = None
@@ -1570,9 +1572,12 @@ class SettingsDialog(QMainWindow):
         spin_value = QDoubleSpinBox()
         spin_value.setRange(0.001, 100000.0)
         spin_value.setDecimals(3)
-        spin_value.setValue(50.0)
+        spin_value.setValue(self._last_scale_bar_value)
         combo_unit = QComboBox()
         combo_unit.addItems(["µm", "nm", "mm"])
+        idx = combo_unit.findText(self._last_scale_bar_unit)
+        if idx >= 0:
+            combo_unit.setCurrentIndex(idx)
         form.addRow(f"バー長: {result.bar_length_px} px  実寸値:", spin_value)
         form.addRow("単位:", combo_unit)
         buttons = QDialogButtonBox(
@@ -1586,6 +1591,8 @@ class SettingsDialog(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             from scale_detector import compute_pixels_per_um_from_bar  # noqa: PLC0415
             unit = combo_unit.currentText()
+            self._last_scale_bar_value = spin_value.value()
+            self._last_scale_bar_unit = unit
             ppu = compute_pixels_per_um_from_bar(result.bar_length_px, spin_value.value(), unit)
             status = (
                 f"設定: {result.bar_length_px}px = {spin_value.value()}{unit}"
