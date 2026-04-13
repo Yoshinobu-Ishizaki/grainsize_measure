@@ -59,6 +59,7 @@ class _ImageProcessTab(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._image_shape: tuple[int, int] | None = None  # (h, w) of last loaded image
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
         container = QWidget()
@@ -99,8 +100,17 @@ class _ImageProcessTab(QWidget):
         self.spin_clahe_tile = QSpinBox()
         self.spin_clahe_tile.setRange(2, 64)
         self.spin_clahe_tile.setValue(8)
-        self.spin_clahe_tile.setToolTip("CLAHEタイルグリッドサイズ (NxN)")
-        form_seg.addRow("CLAHE タイル サイズ:", self.spin_clahe_tile)
+        self.spin_clahe_tile.setToolTip("CLAHEタイルグリッドサイズ (NxN)。「自動」で画像サイズから推定値を設定。")
+        self._btn_clahe_tile_auto = QPushButton("自動")
+        self._btn_clahe_tile_auto.setFixedWidth(48)
+        self._btn_clahe_tile_auto.setToolTip("画像サイズから推奨タイルサイズを計算して設定 (max(8, min(H,W)÷20))")
+        self._btn_clahe_tile_auto.clicked.connect(self._auto_clahe_tile)
+        tile_row = QHBoxLayout()
+        tile_row.setContentsMargins(0, 0, 0, 0)
+        tile_row.addWidget(self.spin_clahe_tile)
+        tile_row.addWidget(self._btn_clahe_tile_auto)
+        tile_row.addStretch()
+        form_seg.addRow("CLAHE タイル サイズ:", tile_row)
 
         self.spin_denoise_h = QDoubleSpinBox()
         self.spin_denoise_h.setRange(0.01, 100.0)
@@ -223,6 +233,16 @@ class _ImageProcessTab(QWidget):
         is_color = (index == 1)
         self.grp_seg.setVisible(not is_color)
         self.grp_color.setVisible(is_color)
+
+    def suggest_clahe_tile(self, h: int, w: int) -> None:
+        """Store image dimensions and update the tile-size spinbox with the auto estimate."""
+        self._image_shape = (h, w)
+        self.spin_clahe_tile.setValue(max(8, min(h, w) // 20))
+
+    def _auto_clahe_tile(self) -> None:
+        if self._image_shape is not None:
+            h, w = self._image_shape
+            self.spin_clahe_tile.setValue(max(8, min(h, w) // 20))
 
     def get_processing_params(self) -> dict:
         method_map = {0: "global_threshold", 1: "adaptive_threshold", 2: "hysteresis_threshold"}
@@ -850,6 +870,7 @@ class SettingsDialog(QMainWindow):
         self._update_button_states()
 
         h, w = self._analyzer.gray_image.shape
+        self._tab_process.suggest_clahe_tile(h, w)
         self._lbl_status_image.setText(f"画像: {Path(path).name}  ({w}×{h} px)")
         self._lbl_status_grains.setText("粒子数: --")
         self.statusBar().showMessage("画像を読み込みました。", 3000)
