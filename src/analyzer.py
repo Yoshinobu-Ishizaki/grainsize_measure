@@ -357,15 +357,19 @@ class GrainAnalyzer:
 
             # One marker per connected interior component — guarantees no grain is
             # ever split by watershed regardless of grain size or shape.
+            # Use ndimage.maximum_position with label index for O(N) single pass
+            # instead of the O(N×G) per-component mask loop.
             _prog("領域ラベリング中...", 1)
             labeled_components = measure.label(binary_grains)
             markers_labeled = np.zeros_like(labeled_components)
-            for cid in range(1, labeled_components.max() + 1):
-                component_mask = labeled_components == cid
-                local_dist = distance * component_mask
-                if local_dist.max() > 0:
-                    peak = np.unravel_index(local_dist.argmax(), local_dist.shape)
-                    markers_labeled[peak] = cid
+            n_components = int(labeled_components.max())
+            if n_components > 0:
+                peak_positions = ndimage.maximum_position(
+                    distance, labeled_components, range(1, n_components + 1)
+                )
+                for cid, peak in enumerate(peak_positions, 1):
+                    if distance[peak] > 0:
+                        markers_labeled[peak] = cid
             _check()
 
             _prog("ウォーターシェッド中...", 2)
@@ -374,35 +378,15 @@ class GrainAnalyzer:
 
         _prog("粒子特性計算中...", 3)
         height, width = self.labeled_grains.shape
-        properties = measure.regionprops(self.labeled_grains)
 
-        grain_data: list[dict] = []
-        for prop in properties:
-            if prop.area < p.min_grain_area:
-                continue
-            if p.exclude_edge_grains:
-                min_row, min_col, max_row, max_col = prop.bbox
-                if (
-                    min_row <= p.edge_buffer
-                    or min_col <= p.edge_buffer
-                    or max_row >= height - p.edge_buffer
-                    or max_col >= width - p.edge_buffer
-                ):
-                    continue
-            if p.grain_roi is not None:
-                rx, ry, rw, rh = p.grain_roi
-                cy, cx = prop.centroid
-                if not (rx <= cx < rx + rw and ry <= cy < ry + rh):
-                    continue
-            grain_data.append({
-                "grain_id": prop.label,
-                "area_pixels": prop.area,
-                "equivalent_diameter_pixels": float(prop.equivalent_diameter_area),
-                "centroid_x": float(prop.centroid[1]),
-                "centroid_y": float(prop.centroid[0]),
-                "eccentricity": float(prop.eccentricity),
-                "solidity": float(prop.solidity),
-            })
+        # regionprops_table() is vectorized C code — much faster than iterating regionprops()
+        props = measure.regionprops_table(
+            self.labeled_grains,
+            properties=[
+                "label", "area", "equivalent_diameter_area",
+                "centroid", "eccentricity", "solidity", "bbox",
+            ],
+        )
 
         schema = {
             "grain_id": pl.Int64,
@@ -413,7 +397,40 @@ class GrainAnalyzer:
             "eccentricity": pl.Float64,
             "solidity": pl.Float64,
         }
-        df = pl.DataFrame(grain_data, schema=schema) if grain_data else pl.DataFrame(schema=schema)
+
+        if len(props["label"]) == 0:
+            df = pl.DataFrame(schema=schema)
+        else:
+            df = pl.DataFrame({
+                "grain_id":                   props["label"].astype("int64"),
+                "area_pixels":                props["area"].astype("int64"),
+                "equivalent_diameter_pixels": props["equivalent_diameter_area"].astype("float64"),
+                "centroid_x":                 props["centroid-1"].astype("float64"),
+                "centroid_y":                 props["centroid-0"].astype("float64"),
+                "eccentricity":               props["eccentricity"].astype("float64"),
+                "solidity":                   props["solidity"].astype("float64"),
+                "_bb0": props["bbox-0"].astype("int64"),
+                "_bb1": props["bbox-1"].astype("int64"),
+                "_bb2": props["bbox-2"].astype("int64"),
+                "_bb3": props["bbox-3"].astype("int64"),
+            })
+            filt = pl.col("area_pixels") >= p.min_grain_area
+            if p.exclude_edge_grains:
+                b = p.edge_buffer
+                filt = filt & (
+                    (pl.col("_bb0") > b) &
+                    (pl.col("_bb1") > b) &
+                    (pl.col("_bb2") < height - b) &
+                    (pl.col("_bb3") < width - b)
+                )
+            if p.grain_roi is not None:
+                rx, ry, rw, rh = p.grain_roi
+                filt = filt & (
+                    pl.col("centroid_x").is_between(rx, rx + rw) &
+                    pl.col("centroid_y").is_between(ry, ry + rh)
+                )
+            df = df.filter(filt).drop(["_bb0", "_bb1", "_bb2", "_bb3"])
+            df = df.cast(schema)
 
         if p.pixels_per_um is not None and len(df) > 0:
             ppu = p.pixels_per_um
