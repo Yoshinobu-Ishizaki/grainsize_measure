@@ -125,7 +125,7 @@ class GrainAnalyzer:
         img = self.gray_image.copy()
 
         # 0. Optionally invert (for optical images where boundaries are dark)
-        _prog("輝度調整中...", 0)
+        _prog("(1/7) 輝度調整中...", 0)
         if p.invert_grayscale:
             img = 255 - img
 
@@ -139,21 +139,21 @@ class GrainAnalyzer:
         _check()
 
         # 1. Denoise
-        _prog("ノイズ除去中...", 1)
+        _prog("(2/7) ノイズ除去中...", 1)
         img = sdrv.apply_driver_denoise(
             img, ["nl_means", p.denoise_h, p.denoise_patch, p.denoise_search], quiet_in=True
         )
         _check()
 
         # 2. Sharpen
-        _prog("シャープ化中...", 2)
+        _prog("(3/7) シャープ化中...", 2)
         img = sdrv.apply_driver_sharpen(
             img, ["unsharp_mask", p.sharpen_radius, p.sharpen_amount], quiet_in=True
         )
         _check()
 
         # 3. Threshold → binary
-        _prog("二値化中...", 3)
+        _prog("(4/7) 二値化中...", 3)
         if p.threshold_method == "global_threshold":
             img = sdrv.apply_driver_thresholding(
                 img, ["global_threshold", p.threshold_value], quiet_in=True
@@ -169,7 +169,7 @@ class GrainAnalyzer:
         _check()
 
         # 4. Morphological closing (fill gaps in boundaries); skipped when radius=0
-        _prog("モルフォロジー処理中...", 4)
+        _prog("(5/7) モルフォロジー処理中...", 4)
         if p.morph_close_radius > 0:
             img = sdrv.apply_driver_morph(img, [0, 1, p.morph_close_radius], quiet_in=True)
 
@@ -179,14 +179,14 @@ class GrainAnalyzer:
         _check()
 
         # 6. Remove small features / fill small holes
-        _prog("特徴除去中...", 5)
+        _prog("(6/7) 特徴除去中...", 5)
         img = sdrv.apply_driver_del_features(
             img, ["scikit", p.max_hole_size, p.min_feature_size], quiet_in=True
         )
         _check()
 
         # 7. Optional skeletonization (e.g. for SEM polished samples)
-        _prog("骨格化中...", 6)
+        _prog("(7/7) 骨格化中...", 6)
         if p.skeletonize:
             from skimage.morphology import skeletonize as ski_skeletonize
             from skimage.util import img_as_bool, img_as_ubyte as _ubyte
@@ -351,7 +351,7 @@ class GrainAnalyzer:
             # GSAT binary: 255=boundary → invert so grain interior=True for distance transform
             binary_grains = self.binary_image == 0  # True where grain interior
 
-            _prog("距離変換中...", 0)
+            _prog("(1/4) 距離変換中...", 0)
             distance = ndimage.distance_transform_edt(binary_grains)
             _check()
 
@@ -359,7 +359,7 @@ class GrainAnalyzer:
             # ever split by watershed regardless of grain size or shape.
             # Use ndimage.maximum_position with label index for O(N) single pass
             # instead of the O(N×G) per-component mask loop.
-            _prog("領域ラベリング中...", 1)
+            _prog("(2/4) 領域ラベリング中...", 1)
             labeled_components = measure.label(binary_grains)
             markers_labeled = np.zeros_like(labeled_components)
             n_components = int(labeled_components.max())
@@ -372,11 +372,11 @@ class GrainAnalyzer:
                         markers_labeled[peak] = cid
             _check()
 
-            _prog("ウォーターシェッド中...", 2)
+            _prog("(3/4) ウォーターシェッド中...", 2)
             self.labeled_grains = segmentation.watershed(-distance, markers_labeled, mask=binary_grains)
             _check()
 
-        _prog("粒子特性計算中...", 3)
+        _prog("(4/4) 粒子特性計算中...", 3)
         height, width = self.labeled_grains.shape
 
         # regionprops_table() is vectorized C code — much faster than iterating regionprops()

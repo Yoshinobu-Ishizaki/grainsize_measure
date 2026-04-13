@@ -1344,8 +1344,8 @@ class SettingsDialog(QMainWindow):
         self._process_thread.finished.connect(self._process_thread.deleteLater)
         self._process_thread.finished.connect(self._on_process_thread_finished)
 
-        self._process_thread.start()
         self._process_dlg.show()
+        self._process_thread.start()
 
     def _cancel_image_process(self) -> None:
         if self._process_worker is not None:
@@ -1417,8 +1417,8 @@ class SettingsDialog(QMainWindow):
         self._calc_thread.finished.connect(self._calc_thread.deleteLater)
         self._calc_thread.finished.connect(self._on_calc_thread_finished)
 
-        self._calc_thread.start()
         self._calc_dlg.show()
+        self._calc_thread.start()
 
     def _cancel_grain_calc(self) -> None:
         if self._calc_worker is not None:
