@@ -164,6 +164,11 @@ class _ImageProcessTab(QWidget):
         self.chk_skeletonize.setChecked(False)
         form_seg.addRow(self.chk_skeletonize)
 
+        self.chk_skip_watershed = QCheckBox("ウォーターシェッドをスキップ (高速モード)")
+        self.chk_skip_watershed.setChecked(False)
+        self.chk_skip_watershed.setToolTip("境界が明確に閉じている場合に高速化。接触粒子が分離されないことがある。")
+        form_seg.addRow(self.chk_skip_watershed)
+
         layout.addWidget(self.grp_seg)
 
         # --- Color-region segmentation (Felzenszwalb) ---
@@ -240,6 +245,7 @@ class _ImageProcessTab(QWidget):
             "min_feature_size": self.spin_min_feature.value(),
             "max_hole_size": 10,
             "skeletonize": self.chk_skeletonize.isChecked(),
+            "skip_watershed": self.chk_skip_watershed.isChecked(),
             "detection_method": "color_region" if self.combo_detection.currentIndex() == 1 else "threshold",
             "color_scale": self.spin_color_scale.value(),
             "color_sigma": self.spin_color_sigma.value(),
@@ -264,6 +270,7 @@ class _ImageProcessTab(QWidget):
         self.spin_morph_open.setValue(int(data.get("morph_open_radius", 0)))
         self.spin_min_feature.setValue(int(data.get("min_feature_size", 64)))
         self.chk_skeletonize.setChecked(bool(data.get("skeletonize", False)))
+        self.chk_skip_watershed.setChecked(bool(data.get("skip_watershed", False)))
         det_method = data.get("detection_method", "threshold")
         self.combo_detection.setCurrentIndex(1 if det_method == "color_region" else 0)
         self.spin_color_scale.setValue(float(data.get("color_scale", 200.0)))

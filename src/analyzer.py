@@ -35,6 +35,7 @@ class AnalysisParams:
     min_feature_size: int = 50
     max_hole_size: int = 10
     skeletonize: bool = False  # apply skeletonization as final segmentation step (e.g. SEM polished)
+    skip_watershed: bool = False  # fast mode: skip watershed, label connected components directly
     clahe_clip_limit: float = 0.0  # 0.0 = disabled; CLAHE clip limit (typical 1.0–5.0)
     clahe_tile_size: int = 8       # CLAHE tile grid size (NxN)
 
@@ -368,30 +369,39 @@ class GrainAnalyzer:
             # GSAT binary: 255=boundary → invert so grain interior=True for distance transform
             binary_grains = self.binary_image == 0  # True where grain interior
 
-            _prog("(1/4) 距離変換中...", 0)
-            distance = ndimage.distance_transform_edt(binary_grains)
-            _check()
+            if p.skip_watershed:
+                # Fast mode: label connected components directly (no distance transform / watershed).
+                # Faster but may over-split touching grains with open boundaries.
+                _prog("(1/4) 高速ラベリング中...", 0)
+                self.labeled_grains = measure.label(binary_grains)
+                _prog("(2/4) 高速ラベリング完了", 1)
+                _prog("(3/4) 高速ラベリング完了", 2)
+                _check()
+            else:
+                _prog("(1/4) 距離変換中...", 0)
+                distance = ndimage.distance_transform_edt(binary_grains)
+                _check()
 
-            # One marker per connected interior component — guarantees no grain is
-            # ever split by watershed regardless of grain size or shape.
-            # Use ndimage.maximum_position with label index for O(N) single pass
-            # instead of the O(N×G) per-component mask loop.
-            _prog("(2/4) 領域ラベリング中...", 1)
-            labeled_components = measure.label(binary_grains)
-            markers_labeled = np.zeros_like(labeled_components)
-            n_components = int(labeled_components.max())
-            if n_components > 0:
-                peak_positions = ndimage.maximum_position(
-                    distance, labeled_components, range(1, n_components + 1)
-                )
-                for cid, peak in enumerate(peak_positions, 1):
-                    if distance[peak] > 0:
-                        markers_labeled[peak] = cid
-            _check()
+                # One marker per connected interior component — guarantees no grain is
+                # ever split by watershed regardless of grain size or shape.
+                # Use ndimage.maximum_position with label index for O(N) single pass
+                # instead of the O(N×G) per-component mask loop.
+                _prog("(2/4) 領域ラベリング中...", 1)
+                labeled_components = measure.label(binary_grains)
+                markers_labeled = np.zeros_like(labeled_components)
+                n_components = int(labeled_components.max())
+                if n_components > 0:
+                    peak_positions = ndimage.maximum_position(
+                        distance, labeled_components, range(1, n_components + 1)
+                    )
+                    for cid, peak in enumerate(peak_positions, 1):
+                        if distance[peak] > 0:
+                            markers_labeled[peak] = cid
+                _check()
 
-            _prog("(3/4) ウォーターシェッド中...", 2)
-            self.labeled_grains = segmentation.watershed(-distance, markers_labeled, mask=binary_grains)
-            _check()
+                _prog("(3/4) ウォーターシェッド中...", 2)
+                self.labeled_grains = segmentation.watershed(-distance, markers_labeled, mask=binary_grains)
+                _check()
 
         _prog("(4/4) 粒子特性計算中...", 3)
         height, width = self.labeled_grains.shape
