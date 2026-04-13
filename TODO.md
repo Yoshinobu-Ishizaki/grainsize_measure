@@ -1,0 +1,7 @@
+- Add zoom in/out function to viewer window.
+- If Ctrl key is holded down and mouse pointer is in a viewer pane, change cursor to zoom pointer.
+- If scroll wheel is used zoom in or out the view.
+- If middle button clicked and dragged, pan its contents.
+- If Ctrl double clicked, reset zoom to default (fit contents to windod).
+- Add this functionality to usage section of document.
+- 
