@@ -1,6 +1,6 @@
 # C2600P 真鍮の結晶粒径解析：加工なし vs 600°C / 60分焼鈍
 yoshinobu.ishizaki
-2026-04-12
+2026-04-13
 
 - [はじめに](#はじめに)
 - [結論](#結論)
@@ -34,15 +34,15 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
 
 焼鈍処理によって，結晶粒径は顕著に増大した。
 
-- **粒数**：加工なし 713 粒 → 焼鈍 131 粒（約 82% 減少）
-- **平均等価円直径**：加工なし 28.2 µm → 焼鈍 64.8 µm（約 2.3 倍）
-- **中央値**：加工なし 26 µm → 焼鈍 46.5 µm
-- **標準偏差**：加工なし 16.7 µm → 焼鈍 44.8 µm
+- **粒数**：加工なし 1658 粒 → 焼鈍 123 粒（約 93% 減少）
+- **平均等価円直径**：加工なし 18.8 µm → 焼鈍 71.1 µm（約 3.8 倍）
+- **中央値**：加工なし 16.6 µm → 焼鈍 55.9 µm
+- **標準偏差**：加工なし 9.4 µm → 焼鈍 42.9 µm
 
 粒径分布は両条件とも右裾の長い非対称分布を示した。 AIC
-最小の最適モデルは，加工なしが **ガンマ分布**，焼鈍が **対数正規分布**
+最小の最適モデルは，加工なしが **対数正規分布**，焼鈍が **対数正規分布**
 であった。
-統一的に当てはめるとしたら、ちょうど中間程度の当てはまりになっているガンマ分布が良さそう。
+一般に粒子径分布は対数正規分布が合うと言われているようだがその通りの結果となった。
 
 ------------------------------------------------------------------------
 
@@ -52,13 +52,13 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
 
 | 加工なし | 600°C/60分焼鈍 |
 |:--:|:--:|
-| ![加工なし オリジナル](c2600p_asis.png) | ![焼鈍 オリジナル](c2600p_600c60min.png) |
+| <img src="20260408_C2600-06tx200_s.jpg" width="400" alt="加工なし オリジナル"> | <img src="20260408_C2600-06tHT600C1hrx200.jpg" width="400" alt="焼鈍 オリジナル"> |
 
 ### 粒界オーバーレイの比較
 
 | 加工なし | 600°C/60分焼鈍 |
 |:--:|:--:|
-| ![加工なし 粒界検出](c2600p_asis_overlay.png) | ![焼鈍 粒界検出](c2600p_600c60min_overlay.png) |
+| <img src="20260408_C2600-06tx200_s_overlay.png" width="400" alt="加工なし 粒界検出"> | <img src="20260408_C2600-06tHT600C1hrx200_overlay.png" width="400" alt="焼鈍 粒界検出"> |
 
 加工なし材では微細な粒が密に分布しているのに対し，
 焼鈍材では明らかに粒が粗大化し，粒界が明瞭に観察できる。
@@ -73,26 +73,27 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
 
 | パラメータ                    |   加工なし   | 600°C/60分焼鈍 |
 |:------------------------------|:------------:|:--------------:|
-| スケール (px/µm)              |     0.49     |      0.49      |
+| スケール (px/µm)              |    0.975     |     0.385      |
 | 検出手法                      | color_region |  color_region  |
 | CLAHE クリップ上限            |      0       |       5        |
-| 適応閾値ブロックサイズ        |      23      |       15       |
+| 適応閾値ブロックサイズ        |      35      |       15       |
 | モルフォロジー閉演算半径 (px) |      1       |       3        |
-| 最小粒面積 (px²)              |      5       |       50       |
-| 最小特徴サイズ (px)           |      9       |       50       |
+| 最小粒面積 (px²)              |      50      |       50       |
+| 最小特徴サイズ (px)           |      64      |       50       |
 | 境界粒子除外                  |     TRUE     |      TRUE      |
 
 主な差異：
 
+- **スケール**：加工なし材（0.975 px/µm）と焼鈍材（0.385
+  px/µm）で倍率が異なる。
 - **CLAHE クリップ上限**：焼鈍材ではコントラスト強調（clip =
-  5.0）を適用。粒界コントラストが低い大粒に対応。
+  5.0）を適用。粒界コントラストが低い大粒に対応。加工なし材は CLAHE
+  なし（0.0）。
+- **適応閾値ブロックサイズ**：各画像の輝度分布に合わせて調整（加工なし =
+  35 px → 焼鈍 = 15 px）。
 - **モルフォロジー閉演算半径**：焼鈍材で大きく設定（1 → 3
   px）し，太くなった粒界を確実に閉じる。
-- **最小粒面積 /
-  最小特徴サイズ**：粒が粗大化しているため，ノイズ除去の閾値を引き上げ（9
-  → 50 px²）。
-- **適応閾値ブロックサイズ**：各画像の輝度分布に合わせて調整（23 → 15
-  px）。
+- **最小特徴サイズ**：加工なし = 64 px²，焼鈍 = 50 px²。
 
 ------------------------------------------------------------------------
 
@@ -100,16 +101,16 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
 
 | 統計量         | 加工なし | 600°C/60分焼鈍 |
 |:---------------|---------:|---------------:|
-| 粒数           |   713.00 |         131.00 |
-| 平均径 (µm)    |    28.21 |          64.78 |
-| 中央値 (µm)    |    25.95 |          46.46 |
-| 標準偏差 (µm)  |    16.72 |          44.80 |
-| 変動係数 (%)   |    59.27 |          69.15 |
-| 最小径 (µm)    |     5.15 |          16.45 |
-| 最大径 (µm)    |    96.99 |         213.23 |
-| 平均面積 (µm²) |   844.31 |        4860.35 |
+| 粒数           |  1658.00 |         123.00 |
+| 平均径 (µm)    |    18.75 |          71.15 |
+| 中央値 (µm)    |    16.59 |          55.92 |
+| 標準偏差 (µm)  |     9.40 |          42.89 |
+| 変動係数 (%)   |    50.16 |          60.28 |
+| 最小径 (µm)    |     8.18 |          21.74 |
+| 最大径 (µm)    |    76.63 |         208.21 |
+| 平均面積 (µm²) |   345.55 |        5409.05 |
 
-焼鈍材は粒数が大幅に減少（713 → 131 粒）し， 平均粒径は約 2.3
+焼鈍材は粒数が大幅に減少（1658 → 123 粒）し， 平均粒径は約 3.8
 倍に増大した。 変動係数は両条件とも 100%
 前後と大きく，粒径分布の散らばりが顕著である。
 
@@ -137,20 +138,20 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
 
 ### フィッティングパラメータと適合度
 
-<div id="jitnrdqclv" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
-<style>#jitnrdqclv table {
+<div id="ufdyjoyhpk" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#ufdyjoyhpk table {
   font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-&#10;#jitnrdqclv thead, #jitnrdqclv tbody, #jitnrdqclv tfoot, #jitnrdqclv tr, #jitnrdqclv td, #jitnrdqclv th {
+&#10;#ufdyjoyhpk thead, #ufdyjoyhpk tbody, #ufdyjoyhpk tfoot, #ufdyjoyhpk tr, #ufdyjoyhpk td, #ufdyjoyhpk th {
   border-style: none;
 }
-&#10;#jitnrdqclv p {
+&#10;#ufdyjoyhpk p {
   margin: 0;
   padding: 0;
 }
-&#10;#jitnrdqclv .gt_table {
+&#10;#ufdyjoyhpk .gt_table {
   display: table;
   border-collapse: collapse;
   line-height: normal;
@@ -175,11 +176,11 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-left-width: 2px;
   border-left-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_caption {
+&#10;#ufdyjoyhpk .gt_caption {
   padding-top: 4px;
   padding-bottom: 4px;
 }
-&#10;#jitnrdqclv .gt_title {
+&#10;#ufdyjoyhpk .gt_title {
   color: #333333;
   font-size: 125%;
   font-weight: initial;
@@ -190,7 +191,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-bottom-color: #FFFFFF;
   border-bottom-width: 0;
 }
-&#10;#jitnrdqclv .gt_subtitle {
+&#10;#ufdyjoyhpk .gt_subtitle {
   color: #333333;
   font-size: 85%;
   font-weight: initial;
@@ -201,7 +202,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-top-color: #FFFFFF;
   border-top-width: 0;
 }
-&#10;#jitnrdqclv .gt_heading {
+&#10;#ufdyjoyhpk .gt_heading {
   background-color: #FFFFFF;
   text-align: center;
   border-bottom-color: #FFFFFF;
@@ -212,12 +213,12 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-right-width: 1px;
   border-right-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_bottom_border {
+&#10;#ufdyjoyhpk .gt_bottom_border {
   border-bottom-style: solid;
   border-bottom-width: 2px;
   border-bottom-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_col_headings {
+&#10;#ufdyjoyhpk .gt_col_headings {
   border-top-style: solid;
   border-top-width: 2px;
   border-top-color: #D3D3D3;
@@ -231,7 +232,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-right-width: 1px;
   border-right-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_col_heading {
+&#10;#ufdyjoyhpk .gt_col_heading {
   color: #333333;
   background-color: #FFFFFF;
   font-size: 100%;
@@ -250,7 +251,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   padding-right: 5px;
   overflow-x: hidden;
 }
-&#10;#jitnrdqclv .gt_column_spanner_outer {
+&#10;#ufdyjoyhpk .gt_column_spanner_outer {
   color: #333333;
   background-color: #FFFFFF;
   font-size: 100%;
@@ -261,13 +262,13 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   padding-left: 4px;
   padding-right: 4px;
 }
-&#10;#jitnrdqclv .gt_column_spanner_outer:first-child {
+&#10;#ufdyjoyhpk .gt_column_spanner_outer:first-child {
   padding-left: 0;
 }
-&#10;#jitnrdqclv .gt_column_spanner_outer:last-child {
+&#10;#ufdyjoyhpk .gt_column_spanner_outer:last-child {
   padding-right: 0;
 }
-&#10;#jitnrdqclv .gt_column_spanner {
+&#10;#ufdyjoyhpk .gt_column_spanner {
   border-bottom-style: solid;
   border-bottom-width: 2px;
   border-bottom-color: #D3D3D3;
@@ -278,10 +279,10 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   display: inline-block;
   width: 100%;
 }
-&#10;#jitnrdqclv .gt_spanner_row {
+&#10;#ufdyjoyhpk .gt_spanner_row {
   border-bottom-style: hidden;
 }
-&#10;#jitnrdqclv .gt_group_heading {
+&#10;#ufdyjoyhpk .gt_group_heading {
   padding-top: 8px;
   padding-bottom: 8px;
   padding-left: 5px;
@@ -306,7 +307,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   vertical-align: middle;
   text-align: left;
 }
-&#10;#jitnrdqclv .gt_empty_group_heading {
+&#10;#ufdyjoyhpk .gt_empty_group_heading {
   padding: 0.5px;
   color: #333333;
   background-color: #FFFFFF;
@@ -320,13 +321,13 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-bottom-color: #D3D3D3;
   vertical-align: middle;
 }
-&#10;#jitnrdqclv .gt_from_md > :first-child {
+&#10;#ufdyjoyhpk .gt_from_md > :first-child {
   margin-top: 0;
 }
-&#10;#jitnrdqclv .gt_from_md > :last-child {
+&#10;#ufdyjoyhpk .gt_from_md > :last-child {
   margin-bottom: 0;
 }
-&#10;#jitnrdqclv .gt_row {
+&#10;#ufdyjoyhpk .gt_row {
   padding-top: 8px;
   padding-bottom: 8px;
   padding-left: 5px;
@@ -344,7 +345,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   vertical-align: middle;
   overflow-x: hidden;
 }
-&#10;#jitnrdqclv .gt_stub {
+&#10;#ufdyjoyhpk .gt_stub {
   color: #333333;
   background-color: #FFFFFF;
   font-size: 100%;
@@ -356,7 +357,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   padding-left: 5px;
   padding-right: 5px;
 }
-&#10;#jitnrdqclv .gt_stub_row_group {
+&#10;#ufdyjoyhpk .gt_stub_row_group {
   color: #333333;
   background-color: #FFFFFF;
   font-size: 100%;
@@ -369,13 +370,13 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   padding-right: 5px;
   vertical-align: top;
 }
-&#10;#jitnrdqclv .gt_row_group_first td {
+&#10;#ufdyjoyhpk .gt_row_group_first td {
   border-top-width: 2px;
 }
-&#10;#jitnrdqclv .gt_row_group_first th {
+&#10;#ufdyjoyhpk .gt_row_group_first th {
   border-top-width: 2px;
 }
-&#10;#jitnrdqclv .gt_summary_row {
+&#10;#ufdyjoyhpk .gt_summary_row {
   color: #333333;
   background-color: #FFFFFF;
   text-transform: inherit;
@@ -384,14 +385,14 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   padding-left: 5px;
   padding-right: 5px;
 }
-&#10;#jitnrdqclv .gt_first_summary_row {
+&#10;#ufdyjoyhpk .gt_first_summary_row {
   border-top-style: solid;
   border-top-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_first_summary_row.thick {
+&#10;#ufdyjoyhpk .gt_first_summary_row.thick {
   border-top-width: 2px;
 }
-&#10;#jitnrdqclv .gt_last_summary_row {
+&#10;#ufdyjoyhpk .gt_last_summary_row {
   padding-top: 8px;
   padding-bottom: 8px;
   padding-left: 5px;
@@ -400,7 +401,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-bottom-width: 2px;
   border-bottom-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_grand_summary_row {
+&#10;#ufdyjoyhpk .gt_grand_summary_row {
   color: #333333;
   background-color: #FFFFFF;
   text-transform: inherit;
@@ -409,7 +410,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   padding-left: 5px;
   padding-right: 5px;
 }
-&#10;#jitnrdqclv .gt_first_grand_summary_row {
+&#10;#ufdyjoyhpk .gt_first_grand_summary_row {
   padding-top: 8px;
   padding-bottom: 8px;
   padding-left: 5px;
@@ -418,7 +419,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-top-width: 6px;
   border-top-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_last_grand_summary_row_top {
+&#10;#ufdyjoyhpk .gt_last_grand_summary_row_top {
   padding-top: 8px;
   padding-bottom: 8px;
   padding-left: 5px;
@@ -427,10 +428,10 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-bottom-width: 6px;
   border-bottom-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_striped {
+&#10;#ufdyjoyhpk .gt_striped {
   background-color: rgba(128, 128, 128, 0.05);
 }
-&#10;#jitnrdqclv .gt_table_body {
+&#10;#ufdyjoyhpk .gt_table_body {
   border-top-style: solid;
   border-top-width: 2px;
   border-top-color: #D3D3D3;
@@ -438,7 +439,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-bottom-width: 2px;
   border-bottom-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_footnotes {
+&#10;#ufdyjoyhpk .gt_footnotes {
   color: #333333;
   background-color: #FFFFFF;
   border-bottom-style: none;
@@ -451,7 +452,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-right-width: 2px;
   border-right-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_footnote {
+&#10;#ufdyjoyhpk .gt_footnote {
   margin: 0px;
   font-size: 90%;
   padding-top: 4px;
@@ -459,7 +460,7 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   padding-left: 5px;
   padding-right: 5px;
 }
-&#10;#jitnrdqclv .gt_sourcenotes {
+&#10;#ufdyjoyhpk .gt_sourcenotes {
   color: #333333;
   background-color: #FFFFFF;
   border-bottom-style: none;
@@ -472,64 +473,64 @@ C2600P について grainsize_measure ツールで解析した二つの試料を
   border-right-width: 2px;
   border-right-color: #D3D3D3;
 }
-&#10;#jitnrdqclv .gt_sourcenote {
+&#10;#ufdyjoyhpk .gt_sourcenote {
   font-size: 90%;
   padding-top: 4px;
   padding-bottom: 4px;
   padding-left: 5px;
   padding-right: 5px;
 }
-&#10;#jitnrdqclv .gt_left {
+&#10;#ufdyjoyhpk .gt_left {
   text-align: left;
 }
-&#10;#jitnrdqclv .gt_center {
+&#10;#ufdyjoyhpk .gt_center {
   text-align: center;
 }
-&#10;#jitnrdqclv .gt_right {
+&#10;#ufdyjoyhpk .gt_right {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-&#10;#jitnrdqclv .gt_font_normal {
+&#10;#ufdyjoyhpk .gt_font_normal {
   font-weight: normal;
 }
-&#10;#jitnrdqclv .gt_font_bold {
+&#10;#ufdyjoyhpk .gt_font_bold {
   font-weight: bold;
 }
-&#10;#jitnrdqclv .gt_font_italic {
+&#10;#ufdyjoyhpk .gt_font_italic {
   font-style: italic;
 }
-&#10;#jitnrdqclv .gt_super {
+&#10;#ufdyjoyhpk .gt_super {
   font-size: 65%;
 }
-&#10;#jitnrdqclv .gt_footnote_marks {
+&#10;#ufdyjoyhpk .gt_footnote_marks {
   font-size: 75%;
   vertical-align: 0.4em;
   position: initial;
 }
-&#10;#jitnrdqclv .gt_asterisk {
+&#10;#ufdyjoyhpk .gt_asterisk {
   font-size: 100%;
   vertical-align: 0;
 }
-&#10;#jitnrdqclv .gt_indent_1 {
+&#10;#ufdyjoyhpk .gt_indent_1 {
   text-indent: 5px;
 }
-&#10;#jitnrdqclv .gt_indent_2 {
+&#10;#ufdyjoyhpk .gt_indent_2 {
   text-indent: 10px;
 }
-&#10;#jitnrdqclv .gt_indent_3 {
+&#10;#ufdyjoyhpk .gt_indent_3 {
   text-indent: 15px;
 }
-&#10;#jitnrdqclv .gt_indent_4 {
+&#10;#ufdyjoyhpk .gt_indent_4 {
   text-indent: 20px;
 }
-&#10;#jitnrdqclv .gt_indent_5 {
+&#10;#ufdyjoyhpk .gt_indent_5 {
   text-indent: 25px;
 }
-&#10;#jitnrdqclv .katex-display {
+&#10;#ufdyjoyhpk .katex-display {
   display: inline-flex !important;
   margin-bottom: 0.75em !important;
 }
-&#10;#jitnrdqclv div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+&#10;#ufdyjoyhpk div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
   height: 0px !important;
 }
 </style>
@@ -594,62 +595,62 @@ data-quarto-table-cell-role="th" scope="col">ガンマ</th>
 <td id="stub_1_1" class="gt_row gt_center gt_stub"
 data-quarto-table-cell-role="th" scope="row">パラメータ1</td>
 <td class="gt_row gt_left" headers="stub_1_1 lnorm_asis">meanlog =
-3.1401</td>
+2.8281</td>
 <td class="gt_row gt_left" headers="stub_1_1 weibull_asis">shape =
-1.7693</td>
+2.1160</td>
 <td class="gt_row gt_left" headers="stub_1_1 gamma_asis">shape =
-2.6591</td>
+5.0105</td>
 <td class="gt_row gt_left" headers="stub_1_1 lnorm_heat">meanlog =
-3.9505</td>
+4.0923</td>
 <td class="gt_row gt_left" headers="stub_1_1 weibull_heat">shape =
-1.5694</td>
+1.7926</td>
 <td class="gt_row gt_left" headers="stub_1_1 gamma_heat">shape =
-2.4212</td>
+3.0549</td>
 </tr>
 <tr>
 <td id="stub_1_2" class="gt_row gt_center gt_stub"
 data-quarto-table-cell-role="th" scope="row">パラメータ2</td>
 <td class="gt_row gt_left" headers="stub_1_2 lnorm_asis">sdlog =
-0.6749</td>
+0.4409</td>
 <td class="gt_row gt_left" headers="stub_1_2 weibull_asis">scale =
-31.7751</td>
+21.2575</td>
 <td class="gt_row gt_left" headers="stub_1_2 gamma_asis">rate =
-0.0942</td>
+0.2672</td>
 <td class="gt_row gt_left" headers="stub_1_2 lnorm_heat">sdlog =
-0.6622</td>
+0.5887</td>
 <td class="gt_row gt_left" headers="stub_1_2 weibull_heat">scale =
-72.7244</td>
+80.5706</td>
 <td class="gt_row gt_left" headers="stub_1_2 gamma_heat">rate =
-0.0374</td>
+0.0429</td>
 </tr>
 <tr>
 <td id="stub_1_3" class="gt_row gt_center gt_stub"
 data-quarto-table-cell-role="th" scope="row">AIC</td>
-<td class="gt_row gt_left" headers="stub_1_3 lnorm_asis">5944.5</td>
-<td class="gt_row gt_left" headers="stub_1_3 weibull_asis">5898.3</td>
-<td class="gt_row gt_left" headers="stub_1_3 gamma_asis"
-style="color: #00ACC1; font-weight: bold">5896.4</td>
+<td class="gt_row gt_left" headers="stub_1_3 lnorm_asis"
+style="color: #00ACC1; font-weight: bold">11371.4</td>
+<td class="gt_row gt_left" headers="stub_1_3 weibull_asis">11816.6</td>
+<td class="gt_row gt_left" headers="stub_1_3 gamma_asis">11525.3</td>
 <td class="gt_row gt_left" headers="stub_1_3 lnorm_heat"
-style="color: #00ACC1; font-weight: bold">1302.8</td>
-<td class="gt_row gt_left" headers="stub_1_3 weibull_heat">1321.2</td>
-<td class="gt_row gt_left" headers="stub_1_3 gamma_heat">1312.8</td>
+style="color: #00ACC1; font-weight: bold">1229.4</td>
+<td class="gt_row gt_left" headers="stub_1_3 weibull_heat">1244</td>
+<td class="gt_row gt_left" headers="stub_1_3 gamma_heat">1235.7</td>
 </tr>
 <tr>
 <td id="stub_1_4" class="gt_row gt_center gt_stub"
 data-quarto-table-cell-role="th" scope="row">BIC</td>
-<td class="gt_row gt_left" headers="stub_1_4 lnorm_asis">5953.6</td>
-<td class="gt_row gt_left" headers="stub_1_4 weibull_asis">5907.4</td>
-<td class="gt_row gt_left" headers="stub_1_4 gamma_asis">5905.5</td>
-<td class="gt_row gt_left" headers="stub_1_4 lnorm_heat">1308.5</td>
-<td class="gt_row gt_left" headers="stub_1_4 weibull_heat">1327</td>
-<td class="gt_row gt_left" headers="stub_1_4 gamma_heat">1318.6</td>
+<td class="gt_row gt_left" headers="stub_1_4 lnorm_asis">11382.2</td>
+<td class="gt_row gt_left" headers="stub_1_4 weibull_asis">11827.4</td>
+<td class="gt_row gt_left" headers="stub_1_4 gamma_asis">11536.1</td>
+<td class="gt_row gt_left" headers="stub_1_4 lnorm_heat">1235</td>
+<td class="gt_row gt_left" headers="stub_1_4 weibull_heat">1249.6</td>
+<td class="gt_row gt_left" headers="stub_1_4 gamma_heat">1241.3</td>
 </tr>
 </tbody>
 </table>
 
 </div>
 
-AIC が最小のモデル（最適フィット）：加工なし = **ガンマ分布**， 焼鈍 =
+AIC が最小のモデル（最適フィット）：加工なし = **対数正規分布**， 焼鈍 =
 **対数正規分布**。
 
 ### 密度オーバーレイ
