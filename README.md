@@ -27,6 +27,14 @@ A Python GUI application that analyses grain structure observation images (with 
 uv run src/grainsize_measure.py
 ```
 
+### Viewer Controls
+
+| Action | Effect |
+|--------|--------|
+| Ctrl + scroll wheel | Zoom in / out |
+| Ctrl + left-drag | Pan the image |
+| Ctrl + left double-click | Reset zoom to fit window |
+
 ## CLI
 
 Run analysis without the GUI:

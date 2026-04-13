@@ -4,7 +4,34 @@ import numpy as np
 
 from PyQt6.QtCore import Qt, QPoint, QRect, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QCursor, QImage, QPainter, QPen, QPixmap
-from PyQt6.QtWidgets import QLabel, QRubberBand, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QRubberBand, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
+
+
+def _make_zoom_cursor() -> QCursor:
+    """Build a simple magnifying-glass cursor (32×32, transparent background)."""
+    size = 32
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    # Lens circle
+    p.setPen(QPen(Qt.GlobalColor.black, 2.5))
+    p.drawEllipse(3, 3, 17, 17)  # cx=11.5, cy=11.5, r≈8.5
+    # Handle
+    p.setPen(QPen(Qt.GlobalColor.black, 3))
+    p.drawLine(18, 18, 27, 27)
+    p.end()
+    return QCursor(pm, 11, 11)   # hotspot = centre of lens
+
+
+_ZOOM_CURSOR = None   # lazily created after QApplication exists
+
+
+def _zoom_cursor() -> QCursor:
+    global _ZOOM_CURSOR
+    if _ZOOM_CURSOR is None:
+        _ZOOM_CURSOR = _make_zoom_cursor()
+    return _ZOOM_CURSOR
 
 
 class _ImageLabel(QLabel):
@@ -13,6 +40,8 @@ class _ImageLabel(QLabel):
     grain_roi_selected = pyqtSignal(int, int, int, int)    # x, y, w, h (image coords)
     marker_roi_selected = pyqtSignal(int, int, int, int)
     pixel_hovered = pyqtSignal(int, int)
+    pan_delta = pyqtSignal(int, int)       # dx, dy in viewport pixels
+    fit_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -29,7 +58,12 @@ class _ImageLabel(QLabel):
         self._rubber_band: QRubberBand | None = None
         self._origin: QPoint = QPoint()
 
+        self._pan_active: bool = False
+        self._pan_last_pos: QPoint = QPoint()
+        self._ctrl_held: bool = False
+
         self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.WheelFocus)
 
     # ------------------------------------------------------------------
     # Public API
@@ -48,6 +82,20 @@ class _ImageLabel(QLabel):
         if mode != "none":
             self.setCursor(QCursor(Qt.CursorShape.CrossCursor))
         else:
+            self._update_cursor()
+
+    # ------------------------------------------------------------------
+    # Cursor management
+    # ------------------------------------------------------------------
+
+    def _update_cursor(self) -> None:
+        if self._mode != "none":
+            return  # ROI mode manages its own cursor
+        if self._pan_active:
+            self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
+        elif self._ctrl_held:
+            self.setCursor(_zoom_cursor())
+        else:
             self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def set_grain_roi(self, roi: tuple[int, int, int, int] | None) -> None:
@@ -63,6 +111,14 @@ class _ImageLabel(QLabel):
     # ------------------------------------------------------------------
 
     def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                # Ctrl+left: start pan
+                self._pan_active = True
+                self._pan_last_pos = event.pos()
+                self._update_cursor()
+                event.accept()
+                return
         if self._mode == "none" or self._full_pixmap is None:
             return
         if event.button() == Qt.MouseButton.LeftButton:
@@ -73,6 +129,13 @@ class _ImageLabel(QLabel):
             self._rubber_band.show()
 
     def mouseMoveEvent(self, event) -> None:
+        self._ctrl_held = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        if self._pan_active:
+            delta = event.pos() - self._pan_last_pos
+            self._pan_last_pos = event.pos()
+            self.pan_delta.emit(delta.x(), delta.y())
+            event.accept()
+            return
         if self._full_pixmap is not None:
             ix, iy = self._display_to_image(event.pos())
             self.pixel_hovered.emit(ix, iy)
@@ -80,8 +143,20 @@ class _ImageLabel(QLabel):
             self._rubber_band.setGeometry(
                 QRect(self._origin, event.pos()).normalized()
             )
+        self._update_cursor()
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        if (event.button() == Qt.MouseButton.LeftButton and
+                event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            self.fit_requested.emit()
+            event.accept()
 
     def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._pan_active:
+            self._pan_active = False
+            self._update_cursor()
+            event.accept()
+            return
         if self._rubber_band is None or self._mode == "none":
             return
         if event.button() == Qt.MouseButton.LeftButton:
@@ -102,8 +177,35 @@ class _ImageLabel(QLabel):
                     )
 
             self._mode = "none"
-            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+            self._update_cursor()
             self.update()
+
+    def enterEvent(self, event) -> None:
+        self.setFocus()  # grab focus so keyPressEvent fires while mouse is here
+        self._ctrl_held = bool(
+            QApplication.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier
+        )
+        self._update_cursor()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._ctrl_held = False
+        self._pan_active = False
+        self._update_cursor()
+        super().leaveEvent(event)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Control:
+            self._ctrl_held = True
+            self._update_cursor()
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Control:
+            self._ctrl_held = False
+            self._pan_active = False  # safety: end pan if Ctrl released
+            self._update_cursor()
+        super().keyReleaseEvent(event)
 
     # ------------------------------------------------------------------
     # Paint overlay
@@ -210,6 +312,8 @@ class ImageViewer(QWidget):
         self._label.grain_roi_selected.connect(self.grain_roi_selected)
         self._label.marker_roi_selected.connect(self.marker_roi_selected)
         self._label.pixel_hovered.connect(self.pixel_hovered)
+        self._label.pan_delta.connect(self._on_pan_delta)
+        self._label.fit_requested.connect(self.fit_to_window)
 
         self._scroll.setWidget(self._label)
 
@@ -267,6 +371,12 @@ class ImageViewer(QWidget):
             return
         self._zoom_factor = min(vw / iw, vh / ih)
         self._label.set_zoom(self._zoom_factor)
+
+    def _on_pan_delta(self, dx: int, dy: int) -> None:
+        hbar = self._scroll.horizontalScrollBar()
+        vbar = self._scroll.verticalScrollBar()
+        hbar.setValue(hbar.value() - dx)
+        vbar.setValue(vbar.value() - dy)
 
     def wheelEvent(self, event) -> None:
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
