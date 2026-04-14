@@ -1,0 +1,7 @@
+- File path in param json should be stored as Unix path string. It is interpreted with Pathlib. For windows, "/c/..." should be interpreted as "C:\\..."
+- File path should be saved as a relative path from the param json file. For example, it is saved as "foo/bar/image.jpg".
+- But if path is stored as "/foo/bar/baz/image.png" (starting from "/"), it must be interpreted as an absolute path. 
+- Saving with absolute path can not be automatically done from this version. User should manually edit it if they want it to be absolute. Explain this in the document (English/Japanese version both).
+- Until the param file is saved, the image's relative path can not be resolved. So that, the "image_path" should be only resolved when the param json is saved.
+- Path in an older param json file must be interpreted correctly using Pathlib whatever the OS it was for.
+- If the path is absolute, but the file (for example) `/foo/bah/image.jpg` does not exist, try to find relative path `./bah/image.jpg` if the json file's existing directory is `/foo/` . In other words, if json file's parent directory is commonly found in "image_path" partially, omit it and search relatively. 
