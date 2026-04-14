@@ -47,6 +47,9 @@ class ViewerWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         event.ignore()
+        self.statusBar().showMessage(
+            "閉じるボタンは無効です — メインウィンドウと一緒に終了します。", 3000
+        )
 
     # ------------------------------------------------------------------
     # Public API
