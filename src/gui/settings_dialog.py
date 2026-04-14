@@ -45,6 +45,7 @@ from PyQt6.QtWidgets import (
 )
 
 from analyzer import AnalysisParams, GrainAnalyzer
+from path_utils import make_relative_posix_str, resolve_image_path
 from gui.workers import _ImageProcessWorker, _GrainCalcWorker, _ScaleDetectionWorker
 from gui.dialogs import _OptimizerProgressDialog, _CalcProgressDialog
 from gui.viewer_window import ViewerWindow
@@ -907,12 +908,13 @@ class SettingsDialog(QMainWindow):
         saved_x2 = data.get("scale_bar_x2")
         saved_y  = data.get("scale_bar_y")
 
-        image_path = data.get("image_path")
-        if image_path:
+        image_path_str = data.get("image_path")
+        if image_path_str:
             try:
-                self._load_image_path(image_path)
+                resolved = resolve_image_path(image_path_str, Path(path))
+                self._load_image_path(str(resolved))
             except Exception as exc:
-                QMessageBox.warning(self, "画像読み込み失敗", f"{image_path}\n\n{exc}")
+                QMessageBox.warning(self, "画像読み込み失敗", f"{image_path_str}\n\n{exc}")
 
         # Restore scale bar result AFTER image load (which clears _scale_bar_result)
         if saved_x1 is not None and saved_x2 is not None and saved_y is not None:
@@ -941,14 +943,23 @@ class SettingsDialog(QMainWindow):
             self._auto_run_grain_calc = True
             self._image_process()
 
-    def _collect_params_dict(self) -> dict:
-        """Build the params dict that represents current UI state (for save/optimizer)."""
+    def _collect_params_dict(self, json_save_path: Path | None = None) -> dict:
+        """Build the params dict that represents current UI state (for save/optimizer).
+
+        When *json_save_path* is provided the image path is stored as a
+        Unix-style (POSIX) relative path from that file's directory.
+        Otherwise it falls back to an absolute POSIX string.
+        """
         proc = self._tab_process.get_processing_params()
         calc = self._tab_calc.get_calc_params()
         data = {**proc, **calc}
-        data["image_path"] = (
-            str(self._analyzer.image_path) if self._analyzer.image_path else None
-        )
+        img = self._analyzer.image_path
+        if img is None:
+            data["image_path"] = None
+        elif json_save_path is not None:
+            data["image_path"] = make_relative_posix_str(img, json_save_path)
+        else:
+            data["image_path"] = img.as_posix()
         if self._scale_bar_result is not None:
             r = self._scale_bar_result
             marker_roi = self._tab_calc._read_marker_roi()
@@ -973,7 +984,7 @@ class SettingsDialog(QMainWindow):
         self._last_dir = str(Path(path).parent)
         try:
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(self._collect_params_dict(), f, indent=2, ensure_ascii=False)
+                json.dump(self._collect_params_dict(json_save_path=Path(path)), f, indent=2, ensure_ascii=False)
             self.statusBar().showMessage(f"パラメータを保存しました: {Path(path).name}", 3000)
         except Exception as exc:
             QMessageBox.critical(self, "エラー", f"保存に失敗しました:\n{exc}")
@@ -1006,7 +1017,7 @@ class SettingsDialog(QMainWindow):
 
         try:
             with open(input_path, "w", encoding="utf-8") as f:
-                json.dump(self._collect_params_dict(), f, indent=2, ensure_ascii=False)
+                json.dump(self._collect_params_dict(json_save_path=input_path), f, indent=2, ensure_ascii=False)
         except Exception as exc:
             QMessageBox.critical(self, "エラー", f"パラメータ保存失敗:\n{exc}")
             return

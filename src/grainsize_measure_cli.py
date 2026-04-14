@@ -25,12 +25,17 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
 sys.path.insert(0, str(Path(__file__).parent))
 
 from analyzer import AnalysisParams, GrainAnalyzer  # noqa: E402
+from path_utils import make_relative_posix_str, resolve_image_path  # noqa: E402
 
 
-def _default_params_dict(image_path: Path) -> dict:
-    """Return a JSON-serialisable dict of default AnalysisParams + image_path."""
+def _default_params_dict(image_path: Path, json_path: Path) -> dict:
+    """Return a JSON-serialisable dict of default AnalysisParams + image_path.
+
+    *image_path* is stored as a Unix-style relative path from *json_path*'s
+    parent directory so that param files remain portable.
+    """
     params = AnalysisParams()
-    d: dict = {"image_path": str(image_path)}
+    d: dict = {"image_path": make_relative_posix_str(image_path, json_path)}
     for f in dataclasses.fields(params):
         d[f.name] = getattr(params, f.name)
     return d
@@ -95,8 +100,8 @@ def main() -> None:
     # Image file mode: generate default params JSON and exit
     # ------------------------------------------------------------------ #
     if input_path.suffix.lower() in IMAGE_EXTENSIONS:
-        params_path = input_path.with_name(input_path.stem + "_params.json")
-        default_dict = _default_params_dict(input_path.resolve())
+        params_path = input_path.with_name(input_path.stem + "_params.json").resolve()
+        default_dict = _default_params_dict(input_path.resolve(), params_path)
         with open(params_path, "w", encoding="utf-8") as f:
             json.dump(default_dict, f, indent=2, ensure_ascii=False)
         print(f"Generated default parameter file: {params_path}")
@@ -123,10 +128,7 @@ def main() -> None:
         print("Error: 'image_path' key not found in JSON.", file=sys.stderr)
         sys.exit(1)
 
-    image_path = Path(image_path_str)
-    if not image_path.is_absolute():
-        # Resolve relative to the JSON file's directory
-        image_path = input_path.parent / image_path
+    image_path = resolve_image_path(image_path_str, input_path)
     if not image_path.exists():
         print(f"Error: image not found: {image_path}", file=sys.stderr)
         sys.exit(1)

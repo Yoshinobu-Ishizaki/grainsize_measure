@@ -55,6 +55,27 @@ The params JSON controls all analysis options including detection mode. Set
 color-based grain detection instead of the default GSAT threshold pipeline.
 See the [Parameter Guide](docs/parameter_guide.md) for all JSON fields.
 
+## Param JSON — path handling
+
+The `image_path` field inside a param JSON file is stored as a **Unix-style
+(forward-slash) relative path** from the JSON file's own directory.  This
+makes param files portable: move the JSON and the image together and they
+will continue to work on any OS.
+
+**Rules applied when loading a param file:**
+
+| Stored value | How it is resolved |
+|---|---|
+| Relative (`images/sample.png`) | Resolved relative to the JSON file's directory |
+| Absolute, file exists (`/data/sample.png`) | Used as-is |
+| Absolute, file missing — JSON dir is a prefix | The shared sub-path is tried relative to the JSON directory |
+| Git Bash path on Windows (`/c/Users/…`) | Converted to `C:/Users/…` automatically |
+
+**Saving with an absolute path is not automatic in this version.**
+To use an absolute path, manually edit the JSON and set `image_path` to a
+string beginning with `/` (e.g. `"/data/images/sample.png"`).  Paths that
+start with `/` are always interpreted as absolute.
+
 ## Documentation
 
 | Document | Description |
