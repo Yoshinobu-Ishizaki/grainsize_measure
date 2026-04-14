@@ -29,3 +29,4 @@
 
 - Clearly acknowledge NIST's GSAT source code in README.md .
 - This project is in MIT License.
+- Do not forget edit Japanese version of documents.
