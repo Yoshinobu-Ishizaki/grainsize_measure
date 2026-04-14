@@ -145,6 +145,13 @@ Invert → [CLAHE] → Denoise → Sharpen → Threshold → Morphological ops �
 
 Start around **0.05 – 0.3** and increase if you see many small speckle boundaries; decrease if real boundaries disappear.
 
+| `denoise_h` range | Effect |
+|---|---|
+| 0.01 – 0.1 | Light denoising; preserves fine detail and sharp boundaries |
+| 0.1 – 1.0 | Moderate denoising; recommended operating range for most images |
+| 1.0 – 5.0 | Heavy denoising; boundaries begin to blur and may disappear |
+| 5.0 – 100.0 | Extreme smoothing; image approaches uniform gray, all boundary detail lost |
+
 ---
 
 ### Sharpening (`sharpen_radius`, `sharpen_amount`)
