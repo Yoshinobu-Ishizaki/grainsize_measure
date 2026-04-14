@@ -1,4 +1,6 @@
 {
+  "app_name": "grainsize_measure",
+  "app_version": "0.30.0",
   "image_path": "tests/sample/sem_alpha_beta_ti_6al_4v.tif",
   "pixels_per_um": null,
   "invert_grayscale": false,

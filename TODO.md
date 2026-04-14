@@ -1,3 +1,1 @@
-- Add app's version number to json file for aid of future compatibility handling.
-- Also add app's name to json.
-- 
+-

@@ -8,7 +8,20 @@ from __future__ import annotations
 
 import re
 import sys
+import tomllib
 from pathlib import Path, PurePosixPath
+
+APP_NAME = "grainsize_measure"
+
+
+def read_app_version() -> str:
+    """Read version string from pyproject.toml at the project root."""
+    try:
+        toml_path = Path(__file__).parent.parent / "pyproject.toml"
+        with open(toml_path, "rb") as f:
+            return tomllib.load(f)["project"]["version"]
+    except Exception:
+        return "?.?.?"
 
 
 def make_relative_posix_str(image_path: Path, json_path: Path) -> str:

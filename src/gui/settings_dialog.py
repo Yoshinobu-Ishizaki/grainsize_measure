@@ -2,19 +2,14 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import tomllib
 from contextlib import contextmanager
 from pathlib import Path
 
 
 def _read_version() -> str:
     """Read version string from pyproject.toml at the project root."""
-    try:
-        toml_path = Path(__file__).parent.parent.parent / "pyproject.toml"
-        with open(toml_path, "rb") as f:
-            return tomllib.load(f)["project"]["version"]
-    except Exception:
-        return "?.?.?"
+    from path_utils import read_app_version
+    return read_app_version()
 
 import cv2
 import numpy as np
@@ -950,9 +945,12 @@ class SettingsDialog(QMainWindow):
         Unix-style (POSIX) relative path from that file's directory.
         Otherwise it falls back to an absolute POSIX string.
         """
+        from path_utils import APP_NAME
         proc = self._tab_process.get_processing_params()
         calc = self._tab_calc.get_calc_params()
         data = {**proc, **calc}
+        data["app_name"] = APP_NAME
+        data["app_version"] = _read_version()
         img = self._analyzer.image_path
         if img is None:
             data["image_path"] = None

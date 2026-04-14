@@ -1,4 +1,6 @@
 {
+  "app_name": "grainsize_measure",
+  "app_version": "0.30.0",
   "invert_grayscale": true,
   "clahe_clip_limit": 5.0,
   "clahe_tile_size": 16,

@@ -25,7 +25,7 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
 sys.path.insert(0, str(Path(__file__).parent))
 
 from analyzer import AnalysisParams, GrainAnalyzer  # noqa: E402
-from path_utils import make_relative_posix_str, resolve_image_path  # noqa: E402
+from path_utils import APP_NAME, make_relative_posix_str, read_app_version, resolve_image_path  # noqa: E402
 
 
 def _default_params_dict(image_path: Path, json_path: Path) -> dict:
@@ -35,7 +35,11 @@ def _default_params_dict(image_path: Path, json_path: Path) -> dict:
     parent directory so that param files remain portable.
     """
     params = AnalysisParams()
-    d: dict = {"image_path": make_relative_posix_str(image_path, json_path)}
+    d: dict = {
+        "app_name": APP_NAME,
+        "app_version": read_app_version(),
+        "image_path": make_relative_posix_str(image_path, json_path),
+    }
     for f in dataclasses.fields(params):
         d[f.name] = getattr(params, f.name)
     return d

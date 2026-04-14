@@ -1,4 +1,6 @@
 {
+  "app_name": "grainsize_measure",
+  "app_version": "0.30.0",
   "image_path": "grains_steel_highlighted.tif",
   "denoise_h": 10.0,
   "denoise_patch": 7,
