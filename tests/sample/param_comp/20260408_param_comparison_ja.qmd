@@ -1,0 +1,437 @@
+---
+title: "結晶粒検出パラメータ比較: 20260408_C2600-06tx200_s"
+lang: ja
+date: today
+author: "yoshinobu.ishizaki"
+format:
+  gfm:
+    toc: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(jsonlite)
+library(fitdistrplus)
+library(knitr)
+library(gt)
+
+# ---- 条件定義 ----
+conditions <- tibble(
+  key   = c("moderate_threshold", "opt_threshold", "default_color", "opt_color"),
+  label = c("閾値法（中程度）", "閾値法（最適化）", "色領域法（デフォルト）", "色領域法（最適化）"),
+  method = c("threshold", "threshold", "color_region", "color_region")
+)
+
+cond_colours <- c(
+  "閾値法（中程度）"     = "#1f78b4",
+  "閾値法（最適化）"     = "#33a02c",
+  "色領域法（デフォルト）" = "#e31a1c",
+  "色領域法（最適化）"   = "#ff7f00"
+)
+
+# ---- 粒径CSVの読み込み ----
+grain_col_types <- cols(
+  grain_id                    = col_character(),
+  area_pixels                 = col_double(),
+  equivalent_diameter_pixels  = col_double(),
+  centroid_x                  = col_double(),
+  centroid_y                  = col_double(),
+  eccentricity                = col_double(),
+  solidity                    = col_double(),
+  area_um2                    = col_double(),
+  equivalent_diameter_um      = col_double()
+)
+
+load_grain_csv <- function(key, label) {
+  f <- paste0("cmp_", key, "_grain.csv")
+  if (!file.exists(f)) stop(paste("ファイルが見つかりません:", f))
+  read_csv(f, col_types = grain_col_types) |>
+    mutate(condition = factor(label, levels = conditions$label))
+}
+
+grains_list <- map2(conditions$key, conditions$label, load_grain_csv)
+grains <- bind_rows(grains_list)
+
+# ---- JSONパラメータの読み込み ----
+load_param_json <- function(key) {
+  f <- paste0("param_cmp_", key, ".json")
+  if (!file.exists(f)) return(list())
+  fromJSON(f)
+}
+
+params_list <- setNames(map(conditions$key, load_param_json), conditions$key)
+
+# ---- 記述統計 ----
+stats_tbl <- grains |>
+  group_by(condition) |>
+  summarise(
+    粒数          = n(),
+    平均径_µm     = mean(equivalent_diameter_um),
+    中央値径_µm   = median(equivalent_diameter_um),
+    標準偏差_µm   = sd(equivalent_diameter_um),
+    変動係数_pct  = 100 * sd(equivalent_diameter_um) / mean(equivalent_diameter_um),
+    最小径_µm     = min(equivalent_diameter_um),
+    最大径_µm     = max(equivalent_diameter_um),
+    平均面積_µm2  = mean(area_um2),
+    .groups = "drop"
+  )
+
+# ---- 対数正規分布フィッティング ----
+fits <- map(conditions$label, function(lbl) {
+  x <- grains |> filter(condition == lbl) |> pull(equivalent_diameter_um)
+  tryCatch(fitdist(x, "lnorm"), error = function(e) NULL)
+})
+names(fits) <- conditions$label
+
+extract_lnorm_info <- function(fits) {
+  map_dfr(names(fits), function(lbl) {
+    f <- fits[[lbl]]
+    if (is.null(f)) return(tibble(condition = lbl, meanlog = NA_real_, sdlog = NA_real_, AIC = NA_real_, BIC = NA_real_))
+    p <- f$estimate
+    tibble(
+      condition = lbl,
+      meanlog   = round(p["meanlog"], 4),
+      sdlog     = round(p["sdlog"],   4),
+      AIC       = round(f$aic, 1),
+      BIC       = round(f$bic, 1)
+    )
+  })
+}
+
+fit_info <- extract_lnorm_info(fits)
+best_cond <- fit_info |> slice_min(AIC, n = 1) |> pull(condition)
+
+# ---- 統計変数（インライン用） ----
+n_vals    <- setNames(stats_tbl$粒数,         as.character(stats_tbl$condition))
+mean_vals <- setNames(stats_tbl$平均径_µm,    as.character(stats_tbl$condition))
+cv_vals   <- setNames(stats_tbl$変動係数_pct, as.character(stats_tbl$condition))
+aic_vals  <- setNames(fit_info$AIC,     fit_info$condition)
+ml_vals   <- setNames(fit_info$meanlog, fit_info$condition)
+sl_vals   <- setNames(fit_info$sdlog,   fit_info$condition)
+```
+
+## 概要
+
+本ドキュメントでは、同一の真鍮ミクロ組織画像（`20260408_C2600-06tx200_s.jpg`、C2600 未熱処理、×200）に
+対して4種類の結晶粒検出パラメータ設定を比較する。
+
+| # | 条件 | 検出手法 |
+|---|------|---------|
+| 1 | 閾値法（中程度） | GSATパイプライン — 適応閾値、CLAHE clip=2、denoise_h=0.1、反転あり |
+| 2 | 閾値法（最適化） | GSATパイプライン — ランダム探索で自動最適化（seed 42、中程度設定を起点） |
+| 3 | 色領域法（デフォルト） | Felzenszwalb — scale=200、sigma=0.8、min_size=100 |
+| 4 | 色領域法（最適化） | Felzenszwalb — ランダム探索で自動最適化（seed 42） |
+
+全条件で共通設定：ROI（x=0、y=191、w=1439、h=603）、スケール（pixels_per_um=0.975）、
+粒子フィルタ（min_grain_area=50 px²、exclude_edge_grains=true）。
+
+---
+
+## 結論
+
+目視確認の結果、**色領域法（デフォルト）**（Felzenszwalb、scale=200、sigma=0.8、min_size=100）が
+今回の画像に対して最も自然な粒界検出を示した。
+2064粒の検出数はミクロ組織の実際の粒構造と整合しており、オーバーレイ画像では
+粒界輪郭に沿った連続的で明瞭な境界線が確認できる。
+
+主な知見：
+
+- **閾値法**はこの画像に対してデフォルト設定では機能しない（`invert_grayscale=true`、
+  軽いノイズ除去、適応閾値化が必須）。中程度設定で1149粒を検出できるが、
+  最適化後は176粒にとどまり、低コントラスト粒界を持つ真鍮ミクロ組織への適合性に限界がある。
+- **色領域法**は設定調整なしで良好に機能する。デフォルト設定が最も多くの粒（2064粒）を検出し、
+  目視でも最良のオーバーレイを示した。最適化によりパラメータが粗粒化方向（scale=100、sigma=0.3）
+  にシフトし、1470粒・わずかに大きな平均径となった。
+- **対数正規分布**は全条件で良好なフィット（AIC最小：**`r best_cond`**）を示し、
+  多結晶金属の粒径分布として一般に期待される結果と一致する。
+
+**推奨**：このサンプルタイプには色領域法（デフォルト）を出発点として使用すること。
+デフォルト設定で目視上の過剰・過少分割が生じる場合のみ最適化を実施する。
+
+---
+
+## 解析手順
+
+以下のコマンドで各条件のCSVデータとオーバーレイ画像を生成する（`tests/sample/param_comp/` から実行）：
+
+```bash
+# 条件1: 閾値法（中程度）
+uv run ../../../src/grainsize_measure_cli.py param_cmp_moderate_threshold.json \
+  --out grain chord stat image --oname cmp_moderate_threshold
+
+# 条件2: 閾値法（最適化）
+uv run ../../../scripts/optimize_params.py \
+  --params param_cmp_moderate_threshold.json \
+  --out param_cmp_opt_threshold.json --seed 42
+uv run ../../../src/grainsize_measure_cli.py param_cmp_opt_threshold.json \
+  --out grain chord stat image --oname cmp_opt_threshold
+
+# 条件3: 色領域法（デフォルト）
+uv run ../../../src/grainsize_measure_cli.py param_cmp_default_color.json \
+  --out grain chord stat image --oname cmp_default_color
+
+# 条件4: 色領域法（最適化）
+uv run ../../../scripts/optimize_params.py \
+  --params param_cmp_default_color.json \
+  --out param_cmp_opt_color.json --seed 42
+uv run ../../../src/grainsize_measure_cli.py param_cmp_opt_color.json \
+  --out grain chord stat image --oname cmp_opt_color
+```
+
+---
+
+## オリジナル画像
+
+![オリジナルミクロ組織画像](20260408_C2600-06tx200_s.jpg){width=700}
+
+---
+
+## オーバーレイ画像の比較
+
+| 閾値法（中程度） | 閾値法（最適化） |
+|:---:|:---:|
+| ![](cmp_moderate_threshold_overlay.png){width=350} | ![](cmp_opt_threshold_overlay.png){width=350} |
+
+| 色領域法（デフォルト） | 色領域法（最適化） |
+|:---:|:---:|
+| ![](cmp_default_color_overlay.png){width=350} | ![](cmp_opt_color_overlay.png){width=350} |
+
+---
+
+## 解析パラメータ
+
+```{r params-table}
+threshold_only_keys <- c(
+  "threshold_method", "threshold_value", "threshold_high",
+  "adaptive_block_size", "clahe_clip_limit",
+  "denoise_h", "sharpen_amount",
+  "morph_close_radius", "morph_open_radius", "min_feature_size"
+)
+color_only_keys <- c(
+  "color_scale", "color_sigma", "color_min_size", "color_morph_close_radius"
+)
+
+get_param <- function(plist, key) {
+  method <- plist[["detection_method"]]
+  if (key %in% threshold_only_keys && !is.null(method) && method == "color_region") return("—")
+  if (key %in% color_only_keys     && !is.null(method) && method == "threshold")    return("—")
+  val <- plist[[key]]
+  if (is.null(val)) return("—")
+  as.character(val)
+}
+
+param_label_map <- c(
+  detection_method         = "検出手法",
+  threshold_method         = "閾値化手法",
+  threshold_value          = "閾値",
+  threshold_high           = "上限閾値",
+  adaptive_block_size      = "適応ブロックサイズ",
+  clahe_clip_limit         = "CLAHEクリップ上限",
+  denoise_h                = "ノイズ除去 h",
+  sharpen_amount           = "シャープ化量",
+  morph_close_radius       = "モルフォロジー閉演算半径 (px)",
+  morph_open_radius        = "モルフォロジー開演算半径 (px)",
+  min_feature_size         = "最小特徴サイズ (px²)",
+  color_scale              = "色スケール",
+  color_sigma              = "色シグマ",
+  color_min_size           = "色最小サイズ (px²)",
+  color_morph_close_radius = "色モルフォロジー閉演算半径 (px)"
+)
+
+display_keys <- c(
+  "detection_method",
+  "threshold_method", "threshold_value", "threshold_high",
+  "adaptive_block_size", "clahe_clip_limit",
+  "denoise_h", "sharpen_amount",
+  "morph_close_radius", "morph_open_radius", "min_feature_size",
+  "color_scale", "color_sigma", "color_min_size", "color_morph_close_radius"
+)
+
+param_rows <- tibble(
+  パラメータ            = param_label_map[display_keys],
+  `閾値法（中程度）`    = map_chr(display_keys, ~ get_param(params_list[["moderate_threshold"]], .x)),
+  `閾値法（最適化）`    = map_chr(display_keys, ~ get_param(params_list[["opt_threshold"]], .x)),
+  `色領域法（デフォルト）` = map_chr(display_keys, ~ get_param(params_list[["default_color"]], .x)),
+  `色領域法（最適化）`  = map_chr(display_keys, ~ get_param(params_list[["opt_color"]], .x))
+)
+
+kable(param_rows, align = c("l", "c", "c", "c", "c"))
+```
+
+---
+
+## 記述統計
+
+```{r stats-table}
+stats_tbl |>
+  mutate(across(where(is.numeric), ~ round(.x, 2))) |>
+  rename(
+    条件              = condition,
+    `粒数`            = 粒数,
+    `平均径 (µm)`     = 平均径_µm,
+    `中央値 (µm)`     = 中央値径_µm,
+    `標準偏差 (µm)`   = 標準偏差_µm,
+    `変動係数 (%)`    = 変動係数_pct,
+    `最小径 (µm)`     = 最小径_µm,
+    `最大径 (µm)`     = 最大径_µm,
+    `平均面積 (µm²)`  = 平均面積_µm2
+  ) |>
+  pivot_longer(-条件, names_to = "統計量", values_to = "値") |>
+  pivot_wider(names_from = 条件, values_from = 値) |>
+  kable(align = c("l", "r", "r", "r", "r"))
+```
+
+---
+
+## 粒径分布
+
+### ヒストグラム（確率密度）
+
+```{r histogram, fig.width=10, fig.height=8}
+x_lim <- max(grains$equivalent_diameter_um) * 1.05
+
+ggplot(grains, aes(x = equivalent_diameter_um, fill = condition)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    binwidth = 5, boundary = 0,
+    colour = "white", linewidth = 0.3
+  ) +
+  facet_wrap(~ condition, ncol = 2, scales = "free_y") +
+  scale_x_continuous(limits = c(0, x_lim)) +
+  scale_fill_manual(values = cond_colours) +
+  labs(
+    x = "等価円直径 (µm)", y = "確率密度",
+    title = "条件別粒径分布（ビン幅 5 µm）"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "grey92"))
+```
+
+### 確率密度の比較
+
+```{r density-overlay, fig.width=8, fig.height=4.5}
+ggplot(grains, aes(x = equivalent_diameter_um, colour = condition, fill = condition)) +
+  geom_density(alpha = 0.12, linewidth = 0.9) +
+  scale_x_continuous(limits = c(0, x_lim)) +
+  scale_colour_manual(values = cond_colours) +
+  scale_fill_manual(values = cond_colours) +
+  labs(
+    x = "等価円直径 (µm)", y = "確率密度",
+    title = "カーネル密度推定 — 全条件比較",
+    colour = "条件", fill = "条件"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "bottom")
+```
+
+---
+
+## 対数正規分布フィッティング
+
+`fitdistrplus::fitdist()` による対数正規分布の最尤推定を実施した。
+
+### フィットパラメータと適合度指標
+
+```{r fit-table}
+fit_info |>
+  left_join(conditions |> dplyr::select(label, method), by = c("condition" = "label")) |>
+  rename(
+    条件     = condition,
+    検出手法 = method
+  ) |>
+  gt(rowname_col = "条件") |>
+  tab_header(title = "対数正規分布フィットパラメータと情報量基準") |>
+  tab_spanner(label = "対数正規分布パラメータ", columns = c(meanlog, sdlog)) |>
+  tab_spanner(label = "適合度指標", columns = c(AIC, BIC)) |>
+  cols_label(
+    検出手法 = "検出手法",
+    meanlog  = "meanlog",
+    sdlog    = "sdlog",
+    AIC      = "AIC",
+    BIC      = "BIC"
+  ) |>
+  tab_style(
+    style     = cell_text(weight = "bold", color = "#00ACC1"),
+    locations = cells_body(columns = AIC, rows = 条件 == best_cond)
+  ) |>
+  tab_footnote(
+    footnote = "ハイライトセル = AIC最小（最良フィット）",
+    locations = cells_column_labels(columns = AIC)
+  ) |>
+  tab_options(
+    column_labels.font.weight       = "bold",
+    stub.font.weight                = "bold",
+    table.border.top.style          = "solid",
+    column_labels.border.top.style  = "solid"
+  )
+```
+
+### フィットオーバーレイ — 対数正規分布密度
+
+```{r fit-overlay, fig.width=10, fig.height=8}
+x_seq <- seq(0.5, x_lim, length.out = 600)
+
+curve_data <- map_dfr(conditions$label, function(lbl) {
+  f <- fits[[lbl]]
+  if (is.null(f)) return(NULL)
+  p <- f$estimate
+  tibble(
+    x         = x_seq,
+    y         = dlnorm(x_seq, p["meanlog"], p["sdlog"]),
+    condition = factor(lbl, levels = conditions$label)
+  )
+})
+
+grain_sub <- grains |>
+  mutate(condition = factor(condition, levels = conditions$label))
+
+ggplot() +
+  geom_histogram(
+    data = grain_sub,
+    aes(x = equivalent_diameter_um, y = after_stat(density), fill = condition),
+    binwidth = 5, boundary = 0,
+    colour = "white", linewidth = 0.3, alpha = 0.7
+  ) +
+  geom_line(
+    data = curve_data,
+    aes(x = x, y = y, colour = condition),
+    linewidth = 1.0
+  ) +
+  facet_wrap(~ condition, ncol = 2, scales = "free_y") +
+  scale_x_continuous(limits = c(0, x_lim)) +
+  scale_fill_manual(values = cond_colours) +
+  scale_colour_manual(values = cond_colours) +
+  labs(
+    x = "等価円直径 (µm)", y = "確率密度",
+    title = "ヒストグラムと対数正規分布フィットオーバーレイ"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "grey92"))
+```
+
+### Q-Qプロット（対数正規分布）
+
+```{r qqplots, fig.width=10, fig.height=8}
+par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+for (lbl in conditions$label) {
+  f <- fits[[lbl]]
+  if (!is.null(f)) {
+    qqcomp(
+      list(f),
+      legendtext = "対数正規分布",
+      fitcol = cond_colours[lbl],
+      main = lbl,
+      xlab = "理論分位数",
+      ylab = "実測分位数"
+    )
+  }
+}
+par(mfrow = c(1, 1))
+```
+

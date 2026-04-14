@@ -1,0 +1,20 @@
+{
+  "app_name": "grainsize_measure",
+  "image_path": "20260408_C2600-06tx200_s.jpg",
+  "invert_grayscale": true,
+  "pixels_per_um": 0.975,
+  "grain_roi": [0, 191, 1439, 603],
+  "marker_roi": [1164, 973, 224, 29],
+  "scale_bar_x1": 1182,
+  "scale_bar_x2": 1377,
+  "scale_bar_y": 991,
+  "exclude_edge_grains": true,
+  "min_grain_area": 50,
+  "line_spacing": 60,
+  "n_theta_steps": 5,
+  "detection_method": "color_region",
+  "color_scale": 200.0,
+  "color_sigma": 0.8,
+  "color_min_size": 100,
+  "color_morph_close_radius": 0
+}

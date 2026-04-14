@@ -1,0 +1,10 @@
+metric,value
+chord_count,591
+chord_mean_length_um,19.580892880385264
+chord_std_length_um,27.745729403903262
+astm_grain_size_g,8.053968810824626
+grain_count,176
+grain_mean_area_um2,747.1221086605702
+grain_std_area_um2,984.3331682957394
+grain_mean_diameter_um,26.34651596647626
+grain_std_diameter_um,16.080914285673412
