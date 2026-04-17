@@ -16,6 +16,7 @@ found for the detected locale.
 from __future__ import annotations
 
 import gettext
+import os
 from pathlib import Path
 
 # Locale files live at src/locales/<lang>/LC_MESSAGES/messages.mo
@@ -35,7 +36,14 @@ def setup() -> None:
     global _current_translation
     from PyQt6.QtCore import QLocale  # QApplication must exist before this
 
-    locale_name = QLocale.system().name()          # e.g. "ja_JP", "en_US", "zh_CN"
+    # GRAINSIZE_LANG env var overrides system locale — useful for testing.
+    # On Windows QLocale ignores LANG/LANGUAGE, so this is the portable override.
+    # Example: set GRAINSIZE_LANG=en && uv run src/grainsize_measure.py
+    env_lang = os.environ.get("GRAINSIZE_LANG", "").strip()
+    if env_lang:
+        locale_name = env_lang
+    else:
+        locale_name = QLocale.system().name()      # e.g. "ja_JP", "en_US", "zh_CN"
     lang_code = locale_name.split("_")[0]           # e.g. "ja", "en"
     candidates = [locale_name, lang_code]           # ["ja_JP", "ja"] — first match wins
 
