@@ -2,6 +2,12 @@
 
 A Python GUI application that analyses grain structure observation images (with dimension markers) to detect grain boundaries, calculate individual grain areas, and export the results as CSV files.
 
+## Screenshots
+
+| Main Window | Viewer |
+|---|---|
+| ![Main Window](main_win.png) | ![Viewer](viewer_win.png) |
+
 ## Features
 
 - Automatic scale bar detection from embedded dimension markers (px/µm)

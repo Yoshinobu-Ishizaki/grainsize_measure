@@ -861,7 +861,7 @@ class SettingsDialog(QMainWindow):
     # ------------------------------------------------------------------
 
     def _open_image(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
+        path, _filter = QFileDialog.getOpenFileName(
             self, _("Open Image"), self._last_dir,
             _("Image files (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;All files (*)"),
         )
@@ -900,7 +900,7 @@ class SettingsDialog(QMainWindow):
         self.statusBar().showMessage(_("Image loaded."), 3000)
 
     def _open_params(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
+        path, _filter = QFileDialog.getOpenFileName(
             self, _("Open Parameters"), self._last_dir,
             _("JSON files (*.json);;All files (*)")
         )
@@ -1005,7 +1005,7 @@ class SettingsDialog(QMainWindow):
     def _save_params(self) -> None:
         default_name = f"{self._image_stem}_params.json" if self._image_stem else "params.json"
         initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
-        path, _ = QFileDialog.getSaveFileName(
+        path, _filter = QFileDialog.getSaveFileName(
             self, _("Save Parameters"), initial,
             _("JSON files (*.json);;All files (*)")
         )
@@ -1506,7 +1506,7 @@ class SettingsDialog(QMainWindow):
     def _save_image(self) -> None:
         default_name = f"{self._image_stem}_overlay.png" if self._image_stem else "grain_overlay.png"
         initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
-        path, _ = QFileDialog.getSaveFileName(
+        path, _filter = QFileDialog.getSaveFileName(
             self, _("Save Image"), initial,
             _("PNG files (*.png);;JPEG files (*.jpg);;All files (*)"),
         )
@@ -1522,7 +1522,7 @@ class SettingsDialog(QMainWindow):
     def _export_chord_csv(self) -> None:
         default_name = f"{self._image_stem}_chord.csv" if self._image_stem else "chord_lengths.csv"
         initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
-        path, _ = QFileDialog.getSaveFileName(
+        path, _filter = QFileDialog.getSaveFileName(
             self, _("Save Chord Length CSV"), initial,
             _("CSV files (*.csv);;All files (*)"),
         )
@@ -1538,7 +1538,7 @@ class SettingsDialog(QMainWindow):
     def _export_grain_csv(self) -> None:
         default_name = f"{self._image_stem}_grain.csv" if self._image_stem else "grain_areas.csv"
         initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
-        path, _ = QFileDialog.getSaveFileName(
+        path, _filter = QFileDialog.getSaveFileName(
             self, _("Save Grain Area CSV"), initial,
             _("CSV files (*.csv);;All files (*)"),
         )
@@ -1554,7 +1554,7 @@ class SettingsDialog(QMainWindow):
     def _export_result_csv(self) -> None:
         default_name = f"{self._image_stem}_result.csv" if self._image_stem else "result.csv"
         initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
-        path, _ = QFileDialog.getSaveFileName(
+        path, _filter = QFileDialog.getSaveFileName(
             self, _("Save Result Summary CSV"), initial,
             _("CSV files (*.csv);;All files (*)"),
         )
