@@ -12,6 +12,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from i18n import _
+
 
 class _OptimizerProgressDialog(QDialog):
     """Modal progress dialog shown while the parameter optimizer subprocess runs."""
@@ -20,7 +22,7 @@ class _OptimizerProgressDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("パラメータ最適化")
+        self.setWindowTitle(_("Parameter Optimization"))
         self.setModal(True)
         self.setMinimumWidth(420)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
@@ -29,7 +31,7 @@ class _OptimizerProgressDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        self._phase_label = QLabel("フェーズ 1: 初期スキャン中...")
+        self._phase_label = QLabel(_("Phase 1: Initial scan..."))
         layout.addWidget(self._phase_label)
 
         self._progress_bar = QProgressBar()
@@ -38,33 +40,39 @@ class _OptimizerProgressDialog(QDialog):
         self._progress_bar.setTextVisible(True)
         layout.addWidget(self._progress_bar)
 
-        self._score_label = QLabel("最高スコア: —")
+        self._score_label = QLabel(_("Best score: —"))
         layout.addWidget(self._score_label)
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        self._cancel_btn = QPushButton("キャンセル")
+        self._cancel_btn = QPushButton(_("Cancel"))
         self._cancel_btn.setFixedWidth(100)
         self._cancel_btn.clicked.connect(self._on_cancel_clicked)
         btn_layout.addWidget(self._cancel_btn)
         layout.addLayout(btn_layout)
 
     def set_phase1_progress(self, n: int, total: int) -> None:
-        self._phase_label.setText(f"フェーズ 1: 初期スキャン ({n}/{total})")
+        self._phase_label.setText(
+            _("Phase 1: Initial scan ({n}/{total})").format(n=n, total=total)
+        )
         self._progress_bar.setRange(0, total)
         self._progress_bar.setValue(n)
 
     def set_phase2_start(self, total: int) -> None:
-        self._phase_label.setText(f"フェーズ 2: ランダム探索 (0/{total})")
+        self._phase_label.setText(
+            _("Phase 2: Random search ({n}/{total})").format(n=0, total=total)
+        )
         self._progress_bar.setRange(0, total)
         self._progress_bar.setValue(0)
 
     def set_phase2_progress(self, n: int, total: int) -> None:
-        self._phase_label.setText(f"フェーズ 2: ランダム探索 ({n}/{total})")
+        self._phase_label.setText(
+            _("Phase 2: Random search ({n}/{total})").format(n=n, total=total)
+        )
         self._progress_bar.setValue(n)
 
     def set_best_score(self, score: float) -> None:
-        self._score_label.setText(f"最高スコア: {score:.2f}")
+        self._score_label.setText(_("Best score: {score:.2f}").format(score=score))
 
     def mark_done(self) -> None:
         try:
@@ -75,7 +83,7 @@ class _OptimizerProgressDialog(QDialog):
 
     def _on_cancel_clicked(self) -> None:
         self._cancel_btn.setEnabled(False)
-        self._cancel_btn.setText("キャンセル中...")
+        self._cancel_btn.setText(_("Cancelling..."))
         self.cancel_requested.emit()
 
     def closeEvent(self, event) -> None:
@@ -99,7 +107,7 @@ class _CalcProgressDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        self._step_label = QLabel("準備中...")
+        self._step_label = QLabel(_("Preparing..."))
         layout.addWidget(self._step_label)
 
         self._progress_bar = QProgressBar()
@@ -109,7 +117,7 @@ class _CalcProgressDialog(QDialog):
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        self._cancel_btn = QPushButton("キャンセル")
+        self._cancel_btn = QPushButton(_("Cancel"))
         self._cancel_btn.setFixedWidth(110)
         self._cancel_btn.clicked.connect(self._on_cancel_clicked)
         btn_layout.addWidget(self._cancel_btn)
@@ -129,7 +137,7 @@ class _CalcProgressDialog(QDialog):
 
     def _on_cancel_clicked(self) -> None:
         self._cancel_btn.setEnabled(False)
-        self._cancel_btn.setText("キャンセル中...")
+        self._cancel_btn.setText(_("Cancelling..."))
         self.cancel_requested.emit()
 
     def closeEvent(self, event) -> None:

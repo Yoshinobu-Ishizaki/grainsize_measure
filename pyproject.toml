@@ -18,4 +18,5 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "babel>=2.14",
 ]

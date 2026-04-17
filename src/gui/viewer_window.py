@@ -6,6 +6,7 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QLabel, QMainWindow, QStatusBar, QTabWidget, QWidget
 
 from gui.image_viewer import ImageViewer
+from i18n import _
 
 
 class ViewerWindow(QMainWindow):
@@ -16,7 +17,7 @@ class ViewerWindow(QMainWindow):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("ビューワ")
+        self.setWindowTitle(_("Viewer"))
         self.resize(800, 650)
 
         self._tabs = QTabWidget()
@@ -26,9 +27,9 @@ class ViewerWindow(QMainWindow):
         self._viewer_processed = ImageViewer()
         self._viewer_overlay = ImageViewer()
 
-        self._tabs.addTab(self._viewer_original, "元画像")
-        self._tabs.addTab(self._viewer_processed, "処理結果")
-        self._tabs.addTab(self._viewer_overlay, "粒子オーバーレイ")
+        self._tabs.addTab(self._viewer_original, _("Original Image"))
+        self._tabs.addTab(self._viewer_processed, _("Processed"))
+        self._tabs.addTab(self._viewer_overlay, _("Grain Overlay"))
 
         # forward ROI signals from all viewers
         for viewer in (self._viewer_original, self._viewer_processed, self._viewer_overlay):
@@ -48,7 +49,7 @@ class ViewerWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         event.ignore()
         self.statusBar().showMessage(
-            "閉じるボタンは無効です — メインウィンドウと一緒に終了します。", 3000
+            _("Close button disabled — exits with main window."), 3000
         )
 
     # ------------------------------------------------------------------

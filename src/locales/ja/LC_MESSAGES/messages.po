@@ -1,0 +1,589 @@
+# Japanese translations for grainsize-measure
+# Copyright (C) 2024 Yamaha Corporation
+# This file is distributed under the MIT License.
+msgid ""
+msgstr ""
+"Project-Id-Version: grainsize-measure 0.30.3\n"
+"PO-Revision-Date: 2026-04-17 00:00+0900\n"
+"Last-Translator: \n"
+"Language-Team: Japanese\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+# === grainsize_measure.py ===
+msgid "Grain Size Measurement"
+msgstr "結晶粒サイズ測定"
+
+# === settings_dialog.py — window title ===
+msgid "Grain Size Measurement v{version}"
+msgstr "結晶粒サイズ測定 v{version}"
+
+# === settings_dialog.py — menus ===
+msgid "File"
+msgstr "ファイル"
+
+msgid "Open Image..."
+msgstr "画像を開く..."
+
+msgid "Open Parameters..."
+msgstr "パラメータを開く..."
+
+msgid "Save Parameters..."
+msgstr "パラメータを保存..."
+
+msgid "Run Parameter Optimization..."
+msgstr "パラメータ最適化を実行..."
+
+msgid "Quit"
+msgstr "終了"
+
+msgid "Processing"
+msgstr "処理"
+
+msgid "Image Processing"
+msgstr "画像処理"
+
+msgid "Grain Calculation"
+msgstr "粒子計算"
+
+msgid "Save Image..."
+msgstr "画像を保存..."
+
+msgid "Chord Length CSV Export..."
+msgstr "コード長 CSV エクスポート..."
+
+msgid "Grain Area CSV Export..."
+msgstr "粒子面積 CSV エクスポート..."
+
+msgid "Result Summary CSV Export..."
+msgstr "結果サマリー CSV エクスポート..."
+
+# === settings_dialog.py — tabs ===
+msgid "Results"
+msgstr "計算結果"
+
+# === settings_dialog.py — status bar ===
+msgid "Image: none"
+msgstr "画像: なし"
+
+msgid "Grains: --"
+msgstr "粒子数: --"
+
+msgid "Image: {name}  ({w}×{h} px)"
+msgstr "画像: {name}  ({w}×{h} px)"
+
+msgid "Grains: {count}"
+msgstr "粒子数: {count}"
+
+msgid "Chords: {chords}  Grains: {grains}"
+msgstr "コード数: {chords}  粒子数: {grains}"
+
+# === _ImageProcessTab ===
+msgid "Detection Mode"
+msgstr "検出モード"
+
+msgid "Grayscale Threshold (GSAT)"
+msgstr "グレースケール閾値 (GSAT)"
+
+msgid "Color Region (Felzenszwalb)"
+msgstr "色領域 (Felzenszwalb)"
+
+msgid "Detection Method:"
+msgstr "検出方法:"
+
+msgid "Segmentation (GSAT)"
+msgstr "セグメンテーション (GSAT)"
+
+msgid "Invert Grayscale (dark boundaries)"
+msgstr "グレースケール反転 (暗い境界線)"
+
+msgid "0.0 = disabled; 1.0–5.0 recommended for gray-region grain detection"
+msgstr "0.0 = 無効; グレー領域の粒子検出改善には 1.0–5.0 を推奨"
+
+msgid "CLAHE Clip Limit:"
+msgstr "CLAHE クリップ限界:"
+
+msgid "CLAHE tile grid size (NxN). 'Auto' estimates from image dimensions."
+msgstr "CLAHEタイルグリッドサイズ (NxN)。「自動」で画像サイズから推定値を設定。"
+
+msgid "Auto"
+msgstr "自動"
+
+msgid "Calculate and set recommended tile size from image dimensions (max(8, min(H,W)÷20))"
+msgstr "画像サイズから推奨タイルサイズを計算して設定 (max(8, min(H,W)÷20))"
+
+msgid "CLAHE Tile Size:"
+msgstr "CLAHE タイル サイズ:"
+
+msgid "Denoise h:"
+msgstr "ノイズ除去 h:"
+
+msgid "Sharpen Radius:"
+msgstr "鮮鋭化半径:"
+
+msgid "Sharpen Amount:"
+msgstr "鮮鋭化強度:"
+
+msgid "Global Threshold"
+msgstr "グローバル閾値"
+
+msgid "Adaptive Threshold"
+msgstr "適応的閾値"
+
+msgid "Hysteresis Threshold"
+msgstr "ヒステリシス閾値"
+
+msgid "Threshold Method:"
+msgstr "閾値方法:"
+
+msgid "Threshold (Low):"
+msgstr "閾値 (低):"
+
+msgid "Threshold (High):"
+msgstr "閾値 (高):"
+
+msgid "Adaptive Block:"
+msgstr "適応ブロック:"
+
+msgid "Closing Radius:"
+msgstr "クロージング半径:"
+
+msgid "Opening Radius:"
+msgstr "オープニング半径:"
+
+msgid "Min Feature (px²):"
+msgstr "最小フィーチャ (px²):"
+
+msgid "Skeletonize (for SEM polished images)"
+msgstr "スケルトン化 (SEMポリッシュ画像向け)"
+
+msgid "Skip Watershed (fast mode)"
+msgstr "ウォーターシェッドをスキップ (高速モード)"
+
+msgid "Faster when boundaries are clearly closed. Touching grains may not be separated."
+msgstr "境界が明確に閉じている場合に高速化。接触粒子が分離されないことがある。"
+
+msgid "Color Region Segmentation (Felzenszwalb)"
+msgstr "色領域セグメンテーション (Felzenszwalb)"
+
+msgid "Larger → fewer, larger segments (50–2000 typical)"
+msgstr "大きいほど少ない・大きい粒子 (50–2000 が目安)"
+
+msgid "Scale:"
+msgstr "スケール:"
+
+msgid "Pre-processing Gaussian σ (0.1–3.0)"
+msgstr "前処理ガウシアンσ (0.1–3.0)"
+
+msgid "Sigma:"
+msgstr "シグマ:"
+
+msgid "Minimum segment size (px²)"
+msgstr "最小セグメントサイズ (px²)"
+
+msgid "Min Size (px²):"
+msgstr "最小サイズ (px²):"
+
+msgid "Dilation radius to close gaps in boundaries (px). 0 = disabled"
+msgstr "境界線の隙間を閉じるための膨張半径 (px)。0 = 無効"
+
+msgid "Boundary Closing Radius:"
+msgstr "境界クロージング半径:"
+
+# === _GrainCalcTab ===
+msgid "Scale Settings"
+msgstr "スケール設定"
+
+msgid "(not set)"
+msgstr "(未設定)"
+
+msgid "Auto-detect"
+msgstr "自動検出"
+
+msgid "Grain Region (ROI)"
+msgstr "粒子領域 (ROI)"
+
+msgid "Coordinates:"
+msgstr "座標:"
+
+msgid "Size:"
+msgstr "サイズ:"
+
+msgid "Select in Viewer"
+msgstr "ビューワで選択"
+
+msgid "Clear"
+msgstr "クリア"
+
+msgid "Marker Region (ROI)"
+msgstr "マーカー領域 (ROI)"
+
+msgid "Intercept Measurement"
+msgstr "インターセプト計測"
+
+msgid "Line Spacing (px):"
+msgstr "ライン間隔 (px):"
+
+msgid "Angle Start (°):"
+msgstr "角度 開始 (°):"
+
+msgid "Angle End (°):"
+msgstr "角度 終了 (°):"
+
+msgid "Angle Steps:"
+msgstr "角度 分割数:"
+
+msgid "Re-skeletonize"
+msgstr "再スケルトン化"
+
+msgid "Pad for Rotation"
+msgstr "回転用パディング"
+
+msgid "Grain Filtering"
+msgstr "粒子フィルタリング"
+
+msgid "Min Area (px²):"
+msgstr "最小面積 (px²):"
+
+msgid "Exclude Edge Grains"
+msgstr "端部の粒子を除外"
+
+msgid "Edge Buffer (px):"
+msgstr "端部バッファ (px):"
+
+# === _SaveExportTab ===
+msgid "ASTM E112 Intercept"
+msgstr "ASTM E112 インターセプト"
+
+msgid "(before analysis)"
+msgstr "（解析前）"
+
+msgid "Grain Area Measurement"
+msgstr "粒子面積計測"
+
+msgid "No chords detected."
+msgstr "コードが検出されませんでした。"
+
+msgid "Chords: {count}"
+msgstr "コード数: {count}"
+
+msgid "Mean length:  {val:.1f} px"
+msgstr "平均長:  {val:.1f} px"
+
+msgid "         {val:.3f} µm"
+msgstr "         {val:.3f} µm"
+
+msgid "Std dev: {val:.1f} px"
+msgstr "標準偏差: {val:.1f} px"
+
+msgid "\nASTM G: {g:.2f}"
+msgstr "\nASTM G数: {g:.2f}"
+
+msgid "No grains detected."
+msgstr "粒子が検出されませんでした。"
+
+msgid "Mean area: {val:.3f} µm²"
+msgstr "平均面積: {val:.3f} µm²"
+
+msgid "Mean area: {val:.0f} px²"
+msgstr "平均面積: {val:.0f} px²"
+
+msgid "Mean diam: {val:.3f} µm"
+msgstr "平均直径: {val:.3f} µm"
+
+msgid "Mean diam: {val:.1f} px"
+msgstr "平均直径: {val:.1f} px"
+
+# === status bar messages ===
+msgid "Image loaded."
+msgstr "画像を読み込みました。"
+
+msgid "Parameters loaded: {name}"
+msgstr "パラメータを読み込みました: {name}"
+
+msgid "Parameters saved: {name}"
+msgstr "パラメータを保存しました: {name}"
+
+msgid "Processing image..."
+msgstr "画像処理中..."
+
+msgid "Image processing complete."
+msgstr "画像処理が完了しました。"
+
+msgid "Image processing cancelled."
+msgstr "画像処理をキャンセルしました。"
+
+msgid "Calculating grains..."
+msgstr "粒子計算中..."
+
+msgid "Grain calculation complete."
+msgstr "粒子計算が完了しました。"
+
+msgid "Grain calculation cancelled."
+msgstr "粒子計算をキャンセルしました。"
+
+msgid "Detecting..."
+msgstr "検出中..."
+
+msgid "Detecting scale bar..."
+msgstr "スケールバーを検出中..."
+
+msgid "Scale auto-detected: {ppu:.3f} px/µm"
+msgstr "スケール自動検出: {ppu:.3f} px/µm"
+
+msgid "Scale set: {ppu:.3f} px/µm"
+msgstr "スケール設定: {ppu:.3f} px/µm"
+
+msgid "Scale bar detection failed."
+msgstr "スケールバーの検出に失敗しました。"
+
+msgid "Optimizing... (this may take a while)"
+msgstr "最適化中... (時間がかかります)"
+
+msgid "Optimization cancelled."
+msgstr "最適化をキャンセルしました。"
+
+msgid "Optimization failed."
+msgstr "最適化に失敗しました。"
+
+msgid "Optimization complete. Starting processing."
+msgstr "最適化完了。処理を開始します。"
+
+msgid "Optimization complete (no output)."
+msgstr "最適化完了 (出力なし)。"
+
+msgid "Image saved: {path}"
+msgstr "画像を保存しました: {path}"
+
+msgid "Chord length CSV saved: {path}"
+msgstr "コード長CSVを保存しました: {path}"
+
+msgid "Grain area CSV saved: {path}"
+msgstr "粒子面積CSVを保存しました: {path}"
+
+msgid "Result summary CSV saved: {path}"
+msgstr "結果サマリーCSVを保存しました: {path}"
+
+# === error/dialog messages ===
+msgid "Error"
+msgstr "エラー"
+
+msgid "JSON load failed:\n{exc}"
+msgstr "JSON読み込み失敗:\n{exc}"
+
+msgid "Image Load Failed"
+msgstr "画像読み込み失敗"
+
+msgid "Save failed:\n{exc}"
+msgstr "保存に失敗しました:\n{exc}"
+
+msgid "Optimization"
+msgstr "最適化"
+
+msgid "Please set the Grain ROI before running optimization."
+msgstr "粒子領域 (Grain ROI) を設定してから最適化を実行してください。"
+
+msgid "Image path is unknown."
+msgstr "画像パスが不明です。"
+
+msgid "Parameter save failed:\n{exc}"
+msgstr "パラメータ保存失敗:\n{exc}"
+
+msgid "Optimization error: {msg}"
+msgstr "最適化エラー: {msg}"
+
+msgid "Optimization Error"
+msgstr "最適化エラー"
+
+msgid "Optimization script failed with exit code {code}."
+msgstr "最適化スクリプトが終了コード {code} で失敗しました。"
+
+msgid "Output file not found."
+msgstr "出力ファイルが見つかりません。"
+
+msgid "Image Processing Error"
+msgstr "画像処理エラー"
+
+msgid "An error occurred during image processing."
+msgstr "画像処理中にエラーが発生しました。"
+
+msgid "Grain Calculation Error"
+msgstr "粒子計算エラー"
+
+msgid "An error occurred during grain calculation."
+msgstr "粒子計算中にエラーが発生しました。"
+
+msgid "Detection failed: {msg}"
+msgstr "検出失敗: {msg}"
+
+msgid "Enter Physical Dimension"
+msgstr "実寸入力"
+
+msgid "Bar length: {px} px  Physical value:"
+msgstr "バー長: {px} px  実寸値:"
+
+msgid "Unit:"
+msgstr "単位:"
+
+msgid "Detected: {px}px = {val}{unit} → {ppu:.3f} px/µm"
+msgstr "検出: {px}px = {val}{unit} → {ppu:.3f} px/µm"
+
+msgid "Set: {px}px = {val}{unit} → {ppu:.3f} px/µm"
+msgstr "設定: {px}px = {val}{unit} → {ppu:.3f} px/µm"
+
+msgid "Cancelled"
+msgstr "キャンセルされました"
+
+msgid "Save Image"
+msgstr "画像を保存"
+
+msgid "PNG files (*.png);;JPEG files (*.jpg);;All files (*)"
+msgstr "PNG ファイル (*.png);;JPEG ファイル (*.jpg);;すべてのファイル (*)"
+
+msgid "Save Chord Length CSV"
+msgstr "コード長CSVを保存"
+
+msgid "CSV files (*.csv);;All files (*)"
+msgstr "CSV ファイル (*.csv);;すべてのファイル (*)"
+
+msgid "Save Grain Area CSV"
+msgstr "粒子面積CSVを保存"
+
+msgid "Save Result Summary CSV"
+msgstr "結果サマリーCSVを保存"
+
+msgid "Open Image"
+msgstr "画像を開く"
+
+msgid "Image files (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;All files (*)"
+msgstr "画像ファイル (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;すべてのファイル (*)"
+
+msgid "Open Parameters"
+msgstr "パラメータを開く"
+
+msgid "JSON files (*.json);;All files (*)"
+msgstr "JSON ファイル (*.json);;すべてのファイル (*)"
+
+msgid "Save Parameters"
+msgstr "パラメータを保存"
+
+# === dialogs.py ===
+msgid "Parameter Optimization"
+msgstr "パラメータ最適化"
+
+msgid "Phase 1: Initial scan..."
+msgstr "フェーズ 1: 初期スキャン中..."
+
+msgid "Phase 1: Initial scan ({n}/{total})"
+msgstr "フェーズ 1: 初期スキャン ({n}/{total})"
+
+msgid "Phase 2: Random search ({n}/{total})"
+msgstr "フェーズ 2: ランダム探索 ({n}/{total})"
+
+msgid "Best score: —"
+msgstr "最高スコア: —"
+
+msgid "Best score: {score:.2f}"
+msgstr "最高スコア: {score:.2f}"
+
+msgid "Cancel"
+msgstr "キャンセル"
+
+msgid "Cancelling..."
+msgstr "キャンセル中..."
+
+msgid "Preparing..."
+msgstr "準備中..."
+
+# === viewer_window.py ===
+msgid "Viewer"
+msgstr "ビューワ"
+
+msgid "Original Image"
+msgstr "元画像"
+
+msgid "Processed"
+msgstr "処理結果"
+
+msgid "Grain Overlay"
+msgstr "粒子オーバーレイ"
+
+msgid "Close button disabled — exits with main window."
+msgstr "閉じるボタンは無効です — メインウィンドウと一緒に終了します。"
+
+# === image_viewer.py ===
+msgid "Grain ROI"
+msgstr "粒子領域"
+
+msgid "Marker"
+msgstr "マーカー"
+
+# === workers.py ===
+msgid "Generating overlay..."
+msgstr "オーバーレイ生成中..."
+
+# === analyzer.py — GSAT pipeline ===
+msgid "(1/7) Adjusting brightness..."
+msgstr "(1/7) 輝度調整中..."
+
+msgid "(2/7) Denoising..."
+msgstr "(2/7) ノイズ除去中..."
+
+msgid "(3/7) Sharpening..."
+msgstr "(3/7) シャープ化中..."
+
+msgid "(4/7) Thresholding..."
+msgstr "(4/7) 二値化中..."
+
+msgid "(5/7) Morphological processing..."
+msgstr "(5/7) モルフォロジー処理中..."
+
+msgid "(6/7) Removing small features..."
+msgstr "(6/7) 特徴除去中..."
+
+msgid "(7/7) Skeletonizing..."
+msgstr "(7/7) 骨格化中..."
+
+msgid "Done"
+msgstr "完了"
+
+# === analyzer.py — color segmentation ===
+msgid "(1/3) BGR→RGB conversion..."
+msgstr "(1/3) BGR→RGB変換中..."
+
+msgid "(2/3) Felzenszwalb segmentation..."
+msgstr "(2/3) Felzenszwalb セグメンテーション中..."
+
+msgid "(3/3) Detecting grain boundaries..."
+msgstr "(3/3) 粒界検出中..."
+
+msgid "(3/3) Morphological closing..."
+msgstr "(3/3) モルフォロジー クロージング中..."
+
+# === analyzer.py — intercept measurement ===
+msgid "Measuring chords... (θ={angle:.1f}°)"
+msgstr "コード計測中... (θ={angle:.1f}°)"
+
+# === analyzer.py — grain area measurement ===
+msgid "(1/4) Fast labeling..."
+msgstr "(1/4) 高速ラベリング中..."
+
+msgid "(2/4) Fast labeling complete"
+msgstr "(2/4) 高速ラベリング完了"
+
+msgid "(3/4) Fast labeling complete"
+msgstr "(3/4) 高速ラベリング完了"
+
+msgid "(1/4) Distance transform..."
+msgstr "(1/4) 距離変換中..."
+
+msgid "(2/4) Region labeling..."
+msgstr "(2/4) 領域ラベリング中..."
+
+msgid "(3/4) Watershed..."
+msgstr "(3/4) ウォーターシェッド中..."
+
+msgid "(4/4) Computing grain properties..."
+msgstr "(4/4) 粒子特性計算中..."

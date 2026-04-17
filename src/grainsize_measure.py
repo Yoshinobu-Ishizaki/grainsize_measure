@@ -19,7 +19,13 @@ from gui.settings_dialog import SettingsDialog
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setApplicationName("結晶粒サイズ測定")
+
+    # i18n MUST be initialised after QApplication and before any widget is created.
+    import i18n
+    i18n.setup()
+    from i18n import _
+
+    app.setApplicationName(_("Grain Size Measurement"))
     dialog = SettingsDialog()
     dialog.position_and_show()
     sys.exit(app.exec())

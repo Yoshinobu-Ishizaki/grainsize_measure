@@ -7,6 +7,7 @@ import numpy as np
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from analyzer import AnalysisParams, GrainAnalyzer
+from i18n import _
 
 
 class _ImageProcessWorker(QObject):
@@ -61,7 +62,7 @@ class _GrainCalcWorker(QObject):
                 progress_cb=lambda l, c, t: self.progress.emit(l, c, t),
                 cancel_check=lambda: self._cancel_flag,
             )
-            self.progress.emit("オーバーレイ生成中...", 0, 0)
+            self.progress.emit(_("Generating overlay..."), 0, 0)
             overlay = self._analyzer.render_overlay_image()
             self.finished.emit(chord_df, grain_df, overlay)
         except GrainAnalyzer.Cancelled:

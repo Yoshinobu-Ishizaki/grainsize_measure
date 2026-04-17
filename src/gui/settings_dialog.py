@@ -44,6 +44,7 @@ from path_utils import make_relative_posix_str, resolve_image_path
 from gui.workers import _ImageProcessWorker, _GrainCalcWorker, _ScaleDetectionWorker
 from gui.dialogs import _OptimizerProgressDialog, _CalcProgressDialog
 from gui.viewer_window import ViewerWindow
+from i18n import _
 
 
 # ---------------------------------------------------------------------------
@@ -69,19 +70,22 @@ class _ImageProcessTab(QWidget):
         layout.setSpacing(8)
 
         # --- Detection mode ---
-        grp_mode = QGroupBox("検出モード")
+        grp_mode = QGroupBox(_("Detection Mode"))
         form_mode = QFormLayout(grp_mode)
         self.combo_detection = QComboBox()
-        self.combo_detection.addItems(["グレースケール閾値 (GSAT)", "色領域 (Felzenszwalb)"])
+        self.combo_detection.addItems([
+            _("Grayscale Threshold (GSAT)"),
+            _("Color Region (Felzenszwalb)"),
+        ])
         self.combo_detection.setCurrentIndex(0)
-        form_mode.addRow("検出方法:", self.combo_detection)
+        form_mode.addRow(_("Detection Method:"), self.combo_detection)
         layout.addWidget(grp_mode)
 
         # --- Segmentation ---
-        self.grp_seg = QGroupBox("セグメンテーション (GSAT)")
+        self.grp_seg = QGroupBox(_("Segmentation (GSAT)"))
         form_seg = QFormLayout(self.grp_seg)
 
-        self.chk_invert = QCheckBox("グレースケール反転 (暗い境界線)")
+        self.chk_invert = QCheckBox(_("Invert Grayscale (dark boundaries)"))
         self.chk_invert.setChecked(True)
         form_seg.addRow(self.chk_invert)
 
@@ -90,125 +94,141 @@ class _ImageProcessTab(QWidget):
         self.spin_clahe_clip.setDecimals(1)
         self.spin_clahe_clip.setSingleStep(0.5)
         self.spin_clahe_clip.setValue(0.0)
-        self.spin_clahe_clip.setToolTip("0.0 = 無効; グレー領域の粒子検出改善には 1.0–5.0 を推奨")
-        form_seg.addRow("CLAHE クリップ限界:", self.spin_clahe_clip)
+        self.spin_clahe_clip.setToolTip(
+            _("0.0 = disabled; 1.0\u20135.0 recommended for gray-region grain detection")
+        )
+        form_seg.addRow(_("CLAHE Clip Limit:"), self.spin_clahe_clip)
 
         self.spin_clahe_tile = QSpinBox()
         self.spin_clahe_tile.setRange(2, 64)
         self.spin_clahe_tile.setValue(8)
-        self.spin_clahe_tile.setToolTip("CLAHEタイルグリッドサイズ (NxN)。「自動」で画像サイズから推定値を設定。")
-        self._btn_clahe_tile_auto = QPushButton("自動")
+        self.spin_clahe_tile.setToolTip(
+            _("CLAHE tile grid size (NxN). 'Auto' estimates from image dimensions.")
+        )
+        self._btn_clahe_tile_auto = QPushButton(_("Auto"))
         self._btn_clahe_tile_auto.setFixedWidth(48)
-        self._btn_clahe_tile_auto.setToolTip("画像サイズから推奨タイルサイズを計算して設定 (max(8, min(H,W)÷20))")
+        self._btn_clahe_tile_auto.setToolTip(
+            _("Calculate and set recommended tile size from image dimensions (max(8, min(H,W)\u00f720))")
+        )
         self._btn_clahe_tile_auto.clicked.connect(self._auto_clahe_tile)
         tile_row = QHBoxLayout()
         tile_row.setContentsMargins(0, 0, 0, 0)
         tile_row.addWidget(self.spin_clahe_tile)
         tile_row.addWidget(self._btn_clahe_tile_auto)
         tile_row.addStretch()
-        form_seg.addRow("CLAHE タイル サイズ:", tile_row)
+        form_seg.addRow(_("CLAHE Tile Size:"), tile_row)
 
         self.spin_denoise_h = QDoubleSpinBox()
         self.spin_denoise_h.setRange(0.01, 100.0)
         self.spin_denoise_h.setDecimals(3)
         self.spin_denoise_h.setSingleStep(0.01)
         self.spin_denoise_h.setValue(0.04)
-        form_seg.addRow("ノイズ除去 h:", self.spin_denoise_h)
+        form_seg.addRow(_("Denoise h:"), self.spin_denoise_h)
 
         self.spin_sharpen_radius = QSpinBox()
         self.spin_sharpen_radius.setRange(0, 20)
         self.spin_sharpen_radius.setValue(2)
-        form_seg.addRow("鮮鋭化半径:", self.spin_sharpen_radius)
+        form_seg.addRow(_("Sharpen Radius:"), self.spin_sharpen_radius)
 
         self.spin_sharpen_amount = QDoubleSpinBox()
         self.spin_sharpen_amount.setRange(0.0, 10.0)
         self.spin_sharpen_amount.setSingleStep(0.1)
         self.spin_sharpen_amount.setValue(0.3)
-        form_seg.addRow("鮮鋭化強度:", self.spin_sharpen_amount)
+        form_seg.addRow(_("Sharpen Amount:"), self.spin_sharpen_amount)
 
         self.combo_threshold = QComboBox()
-        self.combo_threshold.addItems(["グローバル閾値", "適応的閾値", "ヒステリシス閾値"])
+        self.combo_threshold.addItems([
+            _("Global Threshold"),
+            _("Adaptive Threshold"),
+            _("Hysteresis Threshold"),
+        ])
         self.combo_threshold.setCurrentIndex(2)
-        form_seg.addRow("閾値方法:", self.combo_threshold)
+        form_seg.addRow(_("Threshold Method:"), self.combo_threshold)
 
         self.spin_threshold_value = QSpinBox()
         self.spin_threshold_value.setRange(0, 255)
         self.spin_threshold_value.setValue(128)
-        form_seg.addRow("閾値 (低):", self.spin_threshold_value)
+        form_seg.addRow(_("Threshold (Low):"), self.spin_threshold_value)
 
         self.spin_threshold_high = QSpinBox()
         self.spin_threshold_high.setRange(0, 255)
         self.spin_threshold_high.setValue(200)
         self.spin_threshold_high.setEnabled(True)   # hysteresis is default
-        form_seg.addRow("閾値 (高):", self.spin_threshold_high)
+        form_seg.addRow(_("Threshold (High):"), self.spin_threshold_high)
 
         self.spin_adaptive_block = QSpinBox()
         self.spin_adaptive_block.setRange(3, 201)
         self.spin_adaptive_block.setSingleStep(2)
         self.spin_adaptive_block.setValue(35)
         self.spin_adaptive_block.setEnabled(False)
-        form_seg.addRow("適応ブロック:", self.spin_adaptive_block)
+        form_seg.addRow(_("Adaptive Block:"), self.spin_adaptive_block)
 
         self.combo_threshold.currentIndexChanged.connect(self._on_threshold_changed)
 
         self.spin_morph_close = QSpinBox()
         self.spin_morph_close.setRange(0, 20)
         self.spin_morph_close.setValue(1)
-        form_seg.addRow("クロージング半径:", self.spin_morph_close)
+        form_seg.addRow(_("Closing Radius:"), self.spin_morph_close)
 
         self.spin_morph_open = QSpinBox()
         self.spin_morph_open.setRange(0, 20)
         self.spin_morph_open.setValue(0)
-        form_seg.addRow("オープニング半径:", self.spin_morph_open)
+        form_seg.addRow(_("Opening Radius:"), self.spin_morph_open)
 
         self.spin_min_feature = QSpinBox()
         self.spin_min_feature.setRange(1, 10000)
         self.spin_min_feature.setValue(64)
-        form_seg.addRow("最小フィーチャ (px²):", self.spin_min_feature)
+        form_seg.addRow(_("Min Feature (px\u00b2):"), self.spin_min_feature)
 
-        self.chk_skeletonize = QCheckBox("スケルトン化 (SEMポリッシュ画像向け)")
+        self.chk_skeletonize = QCheckBox(_("Skeletonize (for SEM polished images)"))
         self.chk_skeletonize.setChecked(False)
         form_seg.addRow(self.chk_skeletonize)
 
-        self.chk_skip_watershed = QCheckBox("ウォーターシェッドをスキップ (高速モード)")
+        self.chk_skip_watershed = QCheckBox(_("Skip Watershed (fast mode)"))
         self.chk_skip_watershed.setChecked(False)
-        self.chk_skip_watershed.setToolTip("境界が明確に閉じている場合に高速化。接触粒子が分離されないことがある。")
+        self.chk_skip_watershed.setToolTip(
+            _("Faster when boundaries are clearly closed. Touching grains may not be separated.")
+        )
         form_seg.addRow(self.chk_skip_watershed)
 
         layout.addWidget(self.grp_seg)
 
         # --- Color-region segmentation (Felzenszwalb) ---
-        self.grp_color = QGroupBox("色領域セグメンテーション (Felzenszwalb)")
+        self.grp_color = QGroupBox(_("Color Region Segmentation (Felzenszwalb)"))
         form_color = QFormLayout(self.grp_color)
 
         self.spin_color_scale = QDoubleSpinBox()
         self.spin_color_scale.setRange(10.0, 5000.0)
         self.spin_color_scale.setSingleStep(50.0)
         self.spin_color_scale.setValue(200.0)
-        self.spin_color_scale.setToolTip("大きいほど少ない・大きい粒子 (50–2000 が目安)")
-        form_color.addRow("スケール:", self.spin_color_scale)
+        self.spin_color_scale.setToolTip(
+            _("Larger \u2192 fewer, larger segments (50\u20132000 typical)")
+        )
+        form_color.addRow(_("Scale:"), self.spin_color_scale)
 
         self.spin_color_sigma = QDoubleSpinBox()
         self.spin_color_sigma.setRange(0.0, 5.0)
         self.spin_color_sigma.setSingleStep(0.1)
         self.spin_color_sigma.setDecimals(2)
         self.spin_color_sigma.setValue(0.8)
-        self.spin_color_sigma.setToolTip("前処理ガウシアンσ (0.1–3.0)")
-        form_color.addRow("シグマ:", self.spin_color_sigma)
+        self.spin_color_sigma.setToolTip(_("Pre-processing Gaussian \u03c3 (0.1\u20133.0)"))
+        form_color.addRow(_("Sigma:"), self.spin_color_sigma)
 
         self.spin_color_min_size = QSpinBox()
         self.spin_color_min_size.setRange(10, 50000)
         self.spin_color_min_size.setSingleStep(50)
         self.spin_color_min_size.setValue(100)
-        self.spin_color_min_size.setToolTip("最小セグメントサイズ (px²)")
-        form_color.addRow("最小サイズ (px²):", self.spin_color_min_size)
+        self.spin_color_min_size.setToolTip(_("Minimum segment size (px\u00b2)"))
+        form_color.addRow(_("Min Size (px\u00b2):"), self.spin_color_min_size)
 
         self.spin_color_morph_close = QSpinBox()
         self.spin_color_morph_close.setRange(0, 20)
         self.spin_color_morph_close.setSingleStep(1)
         self.spin_color_morph_close.setValue(0)
-        self.spin_color_morph_close.setToolTip("境界線の隙間を閉じるための膨張半径 (px)。0 = 無効")
-        form_color.addRow("境界クロージング半径:", self.spin_color_morph_close)
+        self.spin_color_morph_close.setToolTip(
+            _("Dilation radius to close gaps in boundaries (px). 0 = disabled")
+        )
+        form_color.addRow(_("Boundary Closing Radius:"), self.spin_color_morph_close)
 
         layout.addWidget(self.grp_color)
 
@@ -327,17 +347,17 @@ class _GrainCalcTab(QWidget):
         layout.setSpacing(8)
 
         # --- Scale ---
-        grp_scale = QGroupBox("スケール設定")
+        grp_scale = QGroupBox(_("Scale Settings"))
         form_scale = QFormLayout(grp_scale)
 
         self.spin_pixels_per_um = QDoubleSpinBox()
         self.spin_pixels_per_um.setRange(0.0, 100000.0)
         self.spin_pixels_per_um.setDecimals(3)
         self.spin_pixels_per_um.setValue(1.0)
-        self.spin_pixels_per_um.setSpecialValueText("(未設定)")
+        self.spin_pixels_per_um.setSpecialValueText(_("(not set)"))
         self.spin_pixels_per_um.setMinimum(0.0)
 
-        self.btn_auto_detect = QPushButton("自動検出")
+        self.btn_auto_detect = QPushButton(_("Auto-detect"))
         self.btn_auto_detect.setFixedWidth(70)
         self.btn_auto_detect.setEnabled(False)
         self.btn_auto_detect.clicked.connect(self.auto_detect_requested)
@@ -345,7 +365,7 @@ class _GrainCalcTab(QWidget):
         scale_row = QHBoxLayout()
         scale_row.addWidget(self.spin_pixels_per_um, stretch=1)
         scale_row.addWidget(self.btn_auto_detect)
-        form_scale.addRow("px/µm:", scale_row)
+        form_scale.addRow("px/\u00b5m:", scale_row)
 
         self.lbl_scale_status = QLabel()
         self.lbl_scale_status.setWordWrap(True)
@@ -356,7 +376,7 @@ class _GrainCalcTab(QWidget):
         layout.addWidget(grp_scale)
 
         # --- Grain ROI ---
-        grp_grain_roi = QGroupBox("粒子領域 (ROI)")
+        grp_grain_roi = QGroupBox(_("Grain Region (ROI)"))
         form_grain_roi = QFormLayout(grp_grain_roi)
 
         self.spin_grain_x = QSpinBox()
@@ -370,18 +390,18 @@ class _GrainCalcTab(QWidget):
         grain_xy = QHBoxLayout()
         grain_xy.addWidget(QLabel("x:")); grain_xy.addWidget(self.spin_grain_x)
         grain_xy.addWidget(QLabel("y:")); grain_xy.addWidget(self.spin_grain_y)
-        form_grain_roi.addRow("座標:", grain_xy)
+        form_grain_roi.addRow(_("Coordinates:"), grain_xy)
 
         grain_wh = QHBoxLayout()
         grain_wh.addWidget(QLabel("w:")); grain_wh.addWidget(self.spin_grain_w)
         grain_wh.addWidget(QLabel("h:")); grain_wh.addWidget(self.spin_grain_h)
-        form_grain_roi.addRow("サイズ:", grain_wh)
+        form_grain_roi.addRow(_("Size:"), grain_wh)
 
         grain_btns = QHBoxLayout()
-        self.btn_select_grain_roi = QPushButton("ビューワで選択")
+        self.btn_select_grain_roi = QPushButton(_("Select in Viewer"))
         self.btn_select_grain_roi.setEnabled(False)
         self.btn_select_grain_roi.clicked.connect(self.select_grain_roi_requested)
-        self.btn_clear_grain_roi = QPushButton("クリア")
+        self.btn_clear_grain_roi = QPushButton(_("Clear"))
         self.btn_clear_grain_roi.clicked.connect(self._clear_grain_roi)
         grain_btns.addWidget(self.btn_select_grain_roi)
         grain_btns.addWidget(self.btn_clear_grain_roi)
@@ -390,7 +410,7 @@ class _GrainCalcTab(QWidget):
         layout.addWidget(grp_grain_roi)
 
         # --- Marker ROI ---
-        grp_marker_roi = QGroupBox("マーカー領域 (ROI)")
+        grp_marker_roi = QGroupBox(_("Marker Region (ROI)"))
         form_marker_roi = QFormLayout(grp_marker_roi)
 
         self.spin_marker_x = QSpinBox()
@@ -404,18 +424,18 @@ class _GrainCalcTab(QWidget):
         marker_xy = QHBoxLayout()
         marker_xy.addWidget(QLabel("x:")); marker_xy.addWidget(self.spin_marker_x)
         marker_xy.addWidget(QLabel("y:")); marker_xy.addWidget(self.spin_marker_y)
-        form_marker_roi.addRow("座標:", marker_xy)
+        form_marker_roi.addRow(_("Coordinates:"), marker_xy)
 
         marker_wh = QHBoxLayout()
         marker_wh.addWidget(QLabel("w:")); marker_wh.addWidget(self.spin_marker_w)
         marker_wh.addWidget(QLabel("h:")); marker_wh.addWidget(self.spin_marker_h)
-        form_marker_roi.addRow("サイズ:", marker_wh)
+        form_marker_roi.addRow(_("Size:"), marker_wh)
 
         marker_btns = QHBoxLayout()
-        self.btn_select_marker_roi = QPushButton("ビューワで選択")
+        self.btn_select_marker_roi = QPushButton(_("Select in Viewer"))
         self.btn_select_marker_roi.setEnabled(False)
         self.btn_select_marker_roi.clicked.connect(self.select_marker_roi_requested)
-        self.btn_clear_marker_roi = QPushButton("クリア")
+        self.btn_clear_marker_roi = QPushButton(_("Clear"))
         self.btn_clear_marker_roi.clicked.connect(self._clear_marker_roi)
         marker_btns.addWidget(self.btn_select_marker_roi)
         marker_btns.addWidget(self.btn_clear_marker_roi)
@@ -424,58 +444,58 @@ class _GrainCalcTab(QWidget):
         layout.addWidget(grp_marker_roi)
 
         # --- Intercept ---
-        grp_intercept = QGroupBox("インターセプト計測")
+        grp_intercept = QGroupBox(_("Intercept Measurement"))
         form_intercept = QFormLayout(grp_intercept)
 
         self.spin_line_spacing = QSpinBox()
         self.spin_line_spacing.setRange(5, 500)
         self.spin_line_spacing.setValue(60)
-        form_intercept.addRow("ライン間隔 (px):", self.spin_line_spacing)
+        form_intercept.addRow(_("Line Spacing (px):"), self.spin_line_spacing)
 
         self.spin_theta_start = QDoubleSpinBox()
         self.spin_theta_start.setRange(0.0, 180.0)
         self.spin_theta_start.setSingleStep(15.0)
         self.spin_theta_start.setValue(0.0)
-        form_intercept.addRow("角度 開始 (°):", self.spin_theta_start)
+        form_intercept.addRow(_("Angle Start (\u00b0):"), self.spin_theta_start)
 
         self.spin_theta_end = QDoubleSpinBox()
         self.spin_theta_end.setRange(0.0, 180.0)
         self.spin_theta_end.setSingleStep(15.0)
         self.spin_theta_end.setValue(180.0)
-        form_intercept.addRow("角度 終了 (°):", self.spin_theta_end)
+        form_intercept.addRow(_("Angle End (\u00b0):"), self.spin_theta_end)
 
         self.spin_n_theta = QSpinBox()
         self.spin_n_theta.setRange(1, 36)
         self.spin_n_theta.setValue(5)
-        form_intercept.addRow("角度 分割数:", self.spin_n_theta)
+        form_intercept.addRow(_("Angle Steps:"), self.spin_n_theta)
 
-        self.chk_reskeletonize = QCheckBox("再スケルトン化")
+        self.chk_reskeletonize = QCheckBox(_("Re-skeletonize"))
         self.chk_reskeletonize.setChecked(True)
         form_intercept.addRow(self.chk_reskeletonize)
 
-        self.chk_pad_for_rotation = QCheckBox("回転用パディング")
+        self.chk_pad_for_rotation = QCheckBox(_("Pad for Rotation"))
         self.chk_pad_for_rotation.setChecked(True)
         form_intercept.addRow(self.chk_pad_for_rotation)
 
         layout.addWidget(grp_intercept)
 
         # --- Grain filter ---
-        grp_grain = QGroupBox("粒子フィルタリング")
+        grp_grain = QGroupBox(_("Grain Filtering"))
         form_grain = QFormLayout(grp_grain)
 
         self.spin_min_grain_area = QSpinBox()
         self.spin_min_grain_area.setRange(1, 100000)
         self.spin_min_grain_area.setValue(50)
-        form_grain.addRow("最小面積 (px²):", self.spin_min_grain_area)
+        form_grain.addRow(_("Min Area (px\u00b2):"), self.spin_min_grain_area)
 
-        self.chk_exclude_edge = QCheckBox("端部の粒子を除外")
+        self.chk_exclude_edge = QCheckBox(_("Exclude Edge Grains"))
         self.chk_exclude_edge.setChecked(True)
         form_grain.addRow(self.chk_exclude_edge)
 
         self.spin_edge_buffer = QSpinBox()
         self.spin_edge_buffer.setRange(0, 100)
         self.spin_edge_buffer.setValue(5)
-        form_grain.addRow("端部バッファ (px):", self.spin_edge_buffer)
+        form_grain.addRow(_("Edge Buffer (px):"), self.spin_edge_buffer)
 
         self.chk_exclude_edge.toggled.connect(self.spin_edge_buffer.setEnabled)
 
@@ -609,17 +629,17 @@ class _SaveExportTab(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        grp_chord = QGroupBox("ASTM E112 インターセプト")
+        grp_chord = QGroupBox(_("ASTM E112 Intercept"))
         chord_layout = QVBoxLayout(grp_chord)
-        self.lbl_chord_stats = QLabel("（解析前）")
+        self.lbl_chord_stats = QLabel(_("(before analysis)"))
         self.lbl_chord_stats.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.lbl_chord_stats.setWordWrap(True)
         chord_layout.addWidget(self.lbl_chord_stats)
         layout.addWidget(grp_chord)
 
-        grp_grain = QGroupBox("粒子面積計測")
+        grp_grain = QGroupBox(_("Grain Area Measurement"))
         grain_layout = QVBoxLayout(grp_grain)
-        self.lbl_grain_stats = QLabel("（解析前）")
+        self.lbl_grain_stats = QLabel(_("(before analysis)"))
         self.lbl_grain_stats.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.lbl_grain_stats.setWordWrap(True)
         grain_layout.addWidget(self.lbl_grain_stats)
@@ -629,45 +649,49 @@ class _SaveExportTab(QWidget):
 
     def update_chord_stats(self, stats: dict) -> None:
         if not stats:
-            self.lbl_chord_stats.setText("コードが検出されませんでした。")
+            self.lbl_chord_stats.setText(_("No chords detected."))
             return
-        lines = [f"コード数: {stats['count']}"]
+        lines = [_("Chords: {count}").format(count=stats['count'])]
         mean_px = stats.get("mean_px")
         if mean_px is not None:
-            lines.append(f"平均長:  {mean_px:.1f} px")
+            lines.append(_("Mean length:  {val:.1f} px").format(val=mean_px))
         mean_um = stats.get("mean_um")
         if mean_um is not None:
-            lines.append(f"         {mean_um:.3f} µm")
+            lines.append(_("         {val:.3f} \u00b5m").format(val=mean_um))
         std_px = stats.get("std_px")
         if std_px is not None:
-            lines.append(f"標準偏差: {std_px:.1f} px")
+            lines.append(_("Std dev: {val:.1f} px").format(val=std_px))
         astm_g = stats.get("astm_grain_size_g")
         if astm_g is not None:
-            lines.append(f"\nASTM G数: {astm_g:.2f}")
+            lines.append(_("\nASTM G: {g:.2f}").format(g=astm_g))
         self.lbl_chord_stats.setText("\n".join(lines))
 
     def update_grain_stats(self, stats: dict, pixels_per_um: float | None = None) -> None:
         if not stats:
-            self.lbl_grain_stats.setText("粒子が検出されませんでした。")
+            self.lbl_grain_stats.setText(_("No grains detected."))
             return
-        lines = [f"粒子数: {stats['count']}"]
+        lines = [_("Grains: {count}").format(count=stats['count'])]
         mean_area = stats.get("mean_area_px")
         if mean_area is not None:
             if pixels_per_um:
-                lines.append(f"平均面積: {mean_area / (pixels_per_um ** 2):.3f} µm²")
+                lines.append(_("Mean area: {val:.3f} \u00b5m\u00b2").format(
+                    val=mean_area / (pixels_per_um ** 2)
+                ))
             else:
-                lines.append(f"平均面積: {mean_area:.0f} px²")
+                lines.append(_("Mean area: {val:.0f} px\u00b2").format(val=mean_area))
         mean_diam = stats.get("mean_diam_px")
         if mean_diam is not None:
             if pixels_per_um:
-                lines.append(f"平均直径: {mean_diam / pixels_per_um:.3f} µm")
+                lines.append(_("Mean diam: {val:.3f} \u00b5m").format(
+                    val=mean_diam / pixels_per_um
+                ))
             else:
-                lines.append(f"平均直径: {mean_diam:.1f} px")
+                lines.append(_("Mean diam: {val:.1f} px").format(val=mean_diam))
         self.lbl_grain_stats.setText("\n".join(lines))
 
     def reset(self) -> None:
-        self.lbl_chord_stats.setText("（解析前）")
-        self.lbl_grain_stats.setText("（解析前）")
+        self.lbl_chord_stats.setText(_("(before analysis)"))
+        self.lbl_grain_stats.setText(_("(before analysis)"))
 
 
 # ---------------------------------------------------------------------------
@@ -679,7 +703,9 @@ class SettingsDialog(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle(f"結晶粒サイズ測定 v{_read_version()}")
+        self.setWindowTitle(
+            _("Grain Size Measurement v{version}").format(version=_read_version())
+        )
         self.setMinimumWidth(380)
 
         self._analyzer = GrainAnalyzer()
@@ -698,7 +724,7 @@ class SettingsDialog(QMainWindow):
         self._processed_binary_rgb: np.ndarray | None = None
         self._scale_bar_result = None
         self._last_scale_bar_value: float = 50.0
-        self._last_scale_bar_unit: str = "µm"
+        self._last_scale_bar_unit: str = "\u00b5m"
         self._auto_run_grain_calc: bool = False
         self._last_dir: str = ""
         self._process_dlg: _CalcProgressDialog | None = None
@@ -745,39 +771,39 @@ class SettingsDialog(QMainWindow):
     def _build_menu(self) -> None:
         menu_bar = self.menuBar()
 
-        file_menu = menu_bar.addMenu("ファイル")
-        act_open = file_menu.addAction("画像を開く...")
+        file_menu = menu_bar.addMenu(_("File"))
+        act_open = file_menu.addAction(_("Open Image..."))
         act_open.setShortcut("Ctrl+O")
         act_open.triggered.connect(self._open_image)
-        act_open_params = file_menu.addAction("パラメータを開く...")
+        act_open_params = file_menu.addAction(_("Open Parameters..."))
         act_open_params.setShortcut("Ctrl+P")
         act_open_params.triggered.connect(self._open_params)
-        act_save_params = file_menu.addAction("パラメータを保存...")
+        act_save_params = file_menu.addAction(_("Save Parameters..."))
         act_save_params.setShortcut("Ctrl+Shift+S")
         act_save_params.triggered.connect(self._save_params)
         file_menu.addSeparator()
-        self._act_optimize = file_menu.addAction("パラメータ最適化を実行...")
+        self._act_optimize = file_menu.addAction(_("Run Parameter Optimization..."))
         self._act_optimize.triggered.connect(self._run_optimizer)
         file_menu.addSeparator()
-        act_quit = file_menu.addAction("終了")
+        act_quit = file_menu.addAction(_("Quit"))
         act_quit.setShortcut("Ctrl+Q")
         act_quit.triggered.connect(self.close)
 
-        proc_menu = menu_bar.addMenu("処理")
-        self._act_image_process = proc_menu.addAction("画像処理")
+        proc_menu = menu_bar.addMenu(_("Processing"))
+        self._act_image_process = proc_menu.addAction(_("Image Processing"))
         self._act_image_process.setShortcut("F5")
         self._act_image_process.triggered.connect(self._image_process)
-        self._act_grain_calc = proc_menu.addAction("粒子計算")
+        self._act_grain_calc = proc_menu.addAction(_("Grain Calculation"))
         self._act_grain_calc.setShortcut("F6")
         self._act_grain_calc.triggered.connect(self._grain_calc)
         proc_menu.addSeparator()
-        self._act_save_image = proc_menu.addAction("画像を保存...")
+        self._act_save_image = proc_menu.addAction(_("Save Image..."))
         self._act_save_image.triggered.connect(self._save_image)
-        self._act_export_chord_csv = proc_menu.addAction("コード長 CSV エクスポート...")
+        self._act_export_chord_csv = proc_menu.addAction(_("Chord Length CSV Export..."))
         self._act_export_chord_csv.triggered.connect(self._export_chord_csv)
-        self._act_export_grain_csv = proc_menu.addAction("粒子面積 CSV エクスポート...")
+        self._act_export_grain_csv = proc_menu.addAction(_("Grain Area CSV Export..."))
         self._act_export_grain_csv.triggered.connect(self._export_grain_csv)
-        self._act_export_result_csv = proc_menu.addAction("結果サマリー CSV エクスポート...")
+        self._act_export_result_csv = proc_menu.addAction(_("Result Summary CSV Export..."))
         self._act_export_result_csv.triggered.connect(self._export_result_csv)
 
     def _build_tabs(self) -> None:
@@ -788,9 +814,9 @@ class SettingsDialog(QMainWindow):
         self._tab_calc = _GrainCalcTab()
         self._tab_save = _SaveExportTab()
 
-        self._tab_widget.addTab(self._tab_process, "画像処理")
-        self._tab_widget.addTab(self._tab_calc, "粒子計算")
-        self._tab_widget.addTab(self._tab_save, "計算結果")
+        self._tab_widget.addTab(self._tab_process, _("Image Processing"))
+        self._tab_widget.addTab(self._tab_calc, _("Grain Calculation"))
+        self._tab_widget.addTab(self._tab_save, _("Results"))
 
         # Connect tab signals
         self._tab_calc.auto_detect_requested.connect(self._run_scale_detection)
@@ -804,8 +830,8 @@ class SettingsDialog(QMainWindow):
         self._tab_calc.marker_roi_changed.connect(self._on_marker_roi_spinbox_changed)
 
     def _build_status_bar(self) -> None:
-        self._lbl_status_image = QLabel("画像: なし")
-        self._lbl_status_grains = QLabel("粒子数: --")
+        self._lbl_status_image = QLabel(_("Image: none"))
+        self._lbl_status_grains = QLabel(_("Grains: --"))
         status_bar = QStatusBar()
         status_bar.addWidget(self._lbl_status_image)
         status_bar.addWidget(QLabel("|"))
@@ -836,8 +862,8 @@ class SettingsDialog(QMainWindow):
 
     def _open_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "画像を開く", self._last_dir,
-            "画像ファイル (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;すべてのファイル (*)",
+            self, _("Open Image"), self._last_dir,
+            _("Image files (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp);;All files (*)"),
         )
         if not path:
             return
@@ -848,7 +874,7 @@ class SettingsDialog(QMainWindow):
         try:
             self._analyzer.load_image(path)
         except ValueError as exc:
-            QMessageBox.critical(self, "エラー", str(exc))
+            QMessageBox.critical(self, _("Error"), str(exc))
             return
 
         original_rgb = cv2.cvtColor(self._analyzer.original_image, cv2.COLOR_BGR2RGB)
@@ -867,13 +893,16 @@ class SettingsDialog(QMainWindow):
 
         h, w = self._analyzer.gray_image.shape
         self._tab_process.suggest_clahe_tile(h, w)
-        self._lbl_status_image.setText(f"画像: {Path(path).name}  ({w}×{h} px)")
-        self._lbl_status_grains.setText("粒子数: --")
-        self.statusBar().showMessage("画像を読み込みました。", 3000)
+        self._lbl_status_image.setText(
+            _("Image: {name}  ({w}\u00d7{h} px)").format(name=Path(path).name, w=w, h=h)
+        )
+        self._lbl_status_grains.setText(_("Grains: --"))
+        self.statusBar().showMessage(_("Image loaded."), 3000)
 
     def _open_params(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "パラメータを開く", self._last_dir, "JSON ファイル (*.json);;すべてのファイル (*)"
+            self, _("Open Parameters"), self._last_dir,
+            _("JSON files (*.json);;All files (*)")
         )
         if not path:
             return
@@ -886,7 +915,7 @@ class SettingsDialog(QMainWindow):
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as exc:
-            QMessageBox.critical(self, "エラー", f"JSON読み込み失敗:\n{exc}")
+            QMessageBox.critical(self, _("Error"), _("JSON load failed:\n{exc}").format(exc=exc))
             return
 
         self._tab_process.set_processing_params(data)
@@ -909,7 +938,7 @@ class SettingsDialog(QMainWindow):
                 resolved = resolve_image_path(image_path_str, Path(path))
                 self._load_image_path(str(resolved))
             except Exception as exc:
-                QMessageBox.warning(self, "画像読み込み失敗", f"{image_path_str}\n\n{exc}")
+                QMessageBox.warning(self, _("Image Load Failed"), f"{image_path_str}\n\n{exc}")
 
         # Restore scale bar result AFTER image load (which clears _scale_bar_result)
         if saved_x1 is not None and saved_x2 is not None and saved_y is not None:
@@ -931,7 +960,9 @@ class SettingsDialog(QMainWindow):
             self._refresh_processed_with_scale_bar()
             self._viewer.set_marker_roi(None)  # Clear overlay so scale bar line is visible
 
-        self.statusBar().showMessage(f"パラメータを読み込みました: {Path(path).name}", 3000)
+        self.statusBar().showMessage(
+            _("Parameters loaded: {name}").format(name=Path(path).name), 3000
+        )
 
         # Auto-run image processing → grain calculation
         if self._image_loaded:
@@ -975,7 +1006,8 @@ class SettingsDialog(QMainWindow):
         default_name = f"{self._image_stem}_params.json" if self._image_stem else "params.json"
         initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "パラメータを保存", initial, "JSON ファイル (*.json);;すべてのファイル (*)"
+            self, _("Save Parameters"), initial,
+            _("JSON files (*.json);;All files (*)")
         )
         if not path:
             return
@@ -983,9 +1015,11 @@ class SettingsDialog(QMainWindow):
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self._collect_params_dict(json_save_path=Path(path)), f, indent=2, ensure_ascii=False)
-            self.statusBar().showMessage(f"パラメータを保存しました: {Path(path).name}", 3000)
+            self.statusBar().showMessage(
+                _("Parameters saved: {name}").format(name=Path(path).name), 3000
+            )
         except Exception as exc:
-            QMessageBox.critical(self, "エラー", f"保存に失敗しました:\n{exc}")
+            QMessageBox.critical(self, _("Error"), _("Save failed:\n{exc}").format(exc=exc))
 
     # ------------------------------------------------------------------
     # Parameter optimizer
@@ -1000,13 +1034,14 @@ class SettingsDialog(QMainWindow):
         grain_roi = self._tab_calc._read_grain_roi()
         if not grain_roi:
             QMessageBox.warning(
-                self, "最適化", "粒子領域 (Grain ROI) を設定してから最適化を実行してください。"
+                self, _("Optimization"),
+                _("Please set the Grain ROI before running optimization.")
             )
             return
 
         image_path = self._analyzer.image_path
         if image_path is None:
-            QMessageBox.warning(self, "最適化", "画像パスが不明です。")
+            QMessageBox.warning(self, _("Optimization"), _("Image path is unknown."))
             return
 
         image_dir = Path(image_path).parent
@@ -1017,7 +1052,7 @@ class SettingsDialog(QMainWindow):
             with open(input_path, "w", encoding="utf-8") as f:
                 json.dump(self._collect_params_dict(json_save_path=input_path), f, indent=2, ensure_ascii=False)
         except Exception as exc:
-            QMessageBox.critical(self, "エラー", f"パラメータ保存失敗:\n{exc}")
+            QMessageBox.critical(self, _("Error"), _("Parameter save failed:\n{exc}").format(exc=exc))
             return
 
         script_path = Path(__file__).resolve().parent.parent.parent / "scripts" / "optimize_params.py"
@@ -1039,7 +1074,7 @@ class SettingsDialog(QMainWindow):
             "--out",    str(output_path),
         ])
         self._act_optimize.setEnabled(False)
-        self.statusBar().showMessage("最適化中... (時間がかかります)")
+        self.statusBar().showMessage(_("Optimizing... (this may take a while)"))
 
         self._optimizer_progress_dlg = _OptimizerProgressDialog(self)
         self._optimizer_progress_dlg.cancel_requested.connect(self._on_optimizer_cancel)
@@ -1061,7 +1096,9 @@ class SettingsDialog(QMainWindow):
         raw = self._optimizer_proc.readAllStandardError()
         text = bytes(raw).decode("utf-8", errors="replace").strip()
         if text:
-            self.statusBar().showMessage(f"最適化エラー: {text[:120]}", 8000)
+            self.statusBar().showMessage(
+                _("Optimization error: {msg}").format(msg=text[:120]), 8000
+            )
 
     def _parse_optimizer_line(self, line: str) -> None:
         dlg = self._optimizer_progress_dlg
@@ -1125,20 +1162,23 @@ class SettingsDialog(QMainWindow):
 
         if self._optimizer_cancelled:
             self._optimizer_cancelled = False
-            self.statusBar().showMessage("最適化をキャンセルしました。", 3000)
+            self.statusBar().showMessage(_("Optimization cancelled."), 3000)
             return
 
         if exit_code != 0:
-            QMessageBox.critical(self, "最適化エラー", f"最適化スクリプトが終了コード {exit_code} で失敗しました。")
-            self.statusBar().showMessage("最適化に失敗しました。", 5000)
+            QMessageBox.critical(
+                self, _("Optimization Error"),
+                _("Optimization script failed with exit code {code}.").format(code=exit_code)
+            )
+            self.statusBar().showMessage(_("Optimization failed."), 5000)
             return
 
         if self._optimizer_out_path and self._optimizer_out_path.exists():
-            self.statusBar().showMessage("最適化完了。処理を開始します。", 3000)
+            self.statusBar().showMessage(_("Optimization complete. Starting processing."), 3000)
             self._load_params_from_path(str(self._optimizer_out_path))
         else:
-            QMessageBox.warning(self, "最適化", "出力ファイルが見つかりません。")
-            self.statusBar().showMessage("最適化完了 (出力なし)。", 5000)
+            QMessageBox.warning(self, _("Optimization"), _("Output file not found."))
+            self.statusBar().showMessage(_("Optimization complete (no output)."), 5000)
 
     # ------------------------------------------------------------------
     # Processing actions
@@ -1160,13 +1200,13 @@ class SettingsDialog(QMainWindow):
             return
 
         params = self._build_params()
-        self.statusBar().showMessage("画像処理中...")
+        self.statusBar().showMessage(_("Processing image..."))
 
         self._process_thread = QThread()
         self._process_worker = _ImageProcessWorker(self._analyzer, params)
         self._process_worker.moveToThread(self._process_thread)
 
-        self._process_dlg = _CalcProgressDialog("画像処理", self)
+        self._process_dlg = _CalcProgressDialog(_("Image Processing"), self)
         self._process_dlg.cancel_requested.connect(self._cancel_image_process)
         self._process_worker.progress.connect(self._process_dlg.update_progress)
 
@@ -1203,7 +1243,7 @@ class SettingsDialog(QMainWindow):
         self._image_processed = True
         self._calc_done = False
         self._update_button_states()
-        self.statusBar().showMessage("画像処理が完了しました。", 3000)
+        self.statusBar().showMessage(_("Image processing complete."), 3000)
 
         if self._auto_run_grain_calc:
             self._auto_run_grain_calc = False
@@ -1213,15 +1253,15 @@ class SettingsDialog(QMainWindow):
         if self._process_dlg is not None:
             self._process_dlg.mark_done()
             self._process_dlg = None
-        self.statusBar().showMessage("画像処理をキャンセルしました。", 4000)
+        self.statusBar().showMessage(_("Image processing cancelled."), 4000)
         self._update_button_states()
 
     def _on_image_process_error(self, message: str) -> None:
         if self._process_dlg is not None:
             self._process_dlg.mark_done()
             self._process_dlg = None
-        QMessageBox.critical(self, "画像処理エラー", message)
-        self.statusBar().showMessage("画像処理中にエラーが発生しました。", 5000)
+        QMessageBox.critical(self, _("Image Processing Error"), message)
+        self.statusBar().showMessage(_("An error occurred during image processing."), 5000)
         self._update_button_states()
 
     def _grain_calc(self) -> None:
@@ -1231,13 +1271,13 @@ class SettingsDialog(QMainWindow):
             return
 
         params = self._build_params()
-        self.statusBar().showMessage("粒子計算中...")
+        self.statusBar().showMessage(_("Calculating grains..."))
 
         self._calc_thread = QThread()
         self._calc_worker = _GrainCalcWorker(self._analyzer, params)
         self._calc_worker.moveToThread(self._calc_thread)
 
-        self._calc_dlg = _CalcProgressDialog("粒子計算", self)
+        self._calc_dlg = _CalcProgressDialog(_("Grain Calculation"), self)
         self._calc_dlg.cancel_requested.connect(self._cancel_grain_calc)
         self._calc_worker.progress.connect(self._calc_dlg.update_progress)
 
@@ -1281,23 +1321,27 @@ class SettingsDialog(QMainWindow):
 
         chord_count = chord_stats.get("count", 0)
         grain_count = grain_stats.get("count", 0)
-        self._lbl_status_grains.setText(f"コード数: {chord_count}  粒子数: {grain_count}")
-        self.statusBar().showMessage("粒子計算が完了しました。", 5000)
+        self._lbl_status_grains.setText(
+            _("Chords: {chords}  Grains: {grains}").format(
+                chords=chord_count, grains=grain_count
+            )
+        )
+        self.statusBar().showMessage(_("Grain calculation complete."), 5000)
         self._tab_widget.setCurrentIndex(2)  # switch to save/export tab
 
     def _on_grain_calc_cancelled(self) -> None:
         if self._calc_dlg is not None:
             self._calc_dlg.mark_done()
             self._calc_dlg = None
-        self.statusBar().showMessage("粒子計算をキャンセルしました。", 4000)
+        self.statusBar().showMessage(_("Grain calculation cancelled."), 4000)
         self._update_button_states()
 
     def _on_grain_calc_error(self, message: str) -> None:
         if self._calc_dlg is not None:
             self._calc_dlg.mark_done()
             self._calc_dlg = None
-        QMessageBox.critical(self, "粒子計算エラー", message)
-        self.statusBar().showMessage("粒子計算中にエラーが発生しました。", 5000)
+        QMessageBox.critical(self, _("Grain Calculation Error"), message)
+        self.statusBar().showMessage(_("An error occurred during grain calculation."), 5000)
         self._update_button_states()
 
     # ------------------------------------------------------------------
@@ -1309,8 +1353,8 @@ class SettingsDialog(QMainWindow):
             return
         marker_roi = self._tab_calc._read_marker_roi()
         self._tab_calc.btn_auto_detect.setEnabled(False)
-        self._tab_calc.set_scale_status("検出中...")
-        self.statusBar().showMessage("スケールバーを検出中...")
+        self._tab_calc.set_scale_status(_("Detecting..."))
+        self.statusBar().showMessage(_("Detecting scale bar..."))
 
         self._scale_thread = QThread()
         self._scale_worker = _ScaleDetectionWorker(self._analyzer.original_image, marker_roi)
@@ -1378,40 +1422,50 @@ class SettingsDialog(QMainWindow):
     def _on_scale_done(self, result) -> None:
         self._tab_calc.btn_auto_detect.setEnabled(True)
         if result.pixels_per_um is not None:
-            unit_str = result.unit or "µm"
+            unit_str = result.unit or "\u00b5m"
             status = (
-                f"検出: {result.bar_length_px}px = {result.physical_value}{unit_str}"
-                f" → {result.pixels_per_um:.3f} px/µm"
+                _("Detected: {px}px = {val}{unit} \u2192 {ppu:.3f} px/\u00b5m").format(
+                    px=result.bar_length_px,
+                    val=result.physical_value,
+                    unit=unit_str,
+                    ppu=result.pixels_per_um,
+                )
             )
             self._tab_calc.set_scale_from_detection(result.pixels_per_um, status)
             self._scale_bar_result = result
             self._refresh_original_with_scale_bar()
             self._refresh_processed_with_scale_bar()
             self._viewer.set_marker_roi(None)  # Clear overlay so scale bar line is visible
-            self.statusBar().showMessage(f"スケール自動検出: {result.pixels_per_um:.3f} px/µm", 5000)
+            self.statusBar().showMessage(
+                _("Scale auto-detected: {ppu:.3f} px/\u00b5m").format(ppu=result.pixels_per_um),
+                5000
+            )
         else:
             self._prompt_physical_dimension(result)
 
     def _on_scale_error(self, message: str) -> None:
         self._tab_calc.btn_auto_detect.setEnabled(True)
-        self._tab_calc.set_scale_status(f"検出失敗: {message}")
-        self.statusBar().showMessage("スケールバーの検出に失敗しました。", 5000)
+        self._tab_calc.set_scale_status(_("Detection failed: {msg}").format(msg=message))
+        self.statusBar().showMessage(_("Scale bar detection failed."), 5000)
 
     def _prompt_physical_dimension(self, result) -> None:
         dialog = QDialog(self)
-        dialog.setWindowTitle("実寸入力")
+        dialog.setWindowTitle(_("Enter Physical Dimension"))
         form = QFormLayout()
         spin_value = QDoubleSpinBox()
         spin_value.setRange(0.001, 100000.0)
         spin_value.setDecimals(3)
         spin_value.setValue(self._last_scale_bar_value)
         combo_unit = QComboBox()
-        combo_unit.addItems(["µm", "nm", "mm"])
+        combo_unit.addItems(["\u00b5m", "nm", "mm"])
         idx = combo_unit.findText(self._last_scale_bar_unit)
         if idx >= 0:
             combo_unit.setCurrentIndex(idx)
-        form.addRow(f"バー長: {result.bar_length_px} px  実寸値:", spin_value)
-        form.addRow("単位:", combo_unit)
+        form.addRow(
+            _("Bar length: {px} px  Physical value:").format(px=result.bar_length_px),
+            spin_value
+        )
+        form.addRow(_("Unit:"), combo_unit)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -1427,17 +1481,23 @@ class SettingsDialog(QMainWindow):
             self._last_scale_bar_unit = unit
             ppu = compute_pixels_per_um_from_bar(result.bar_length_px, spin_value.value(), unit)
             status = (
-                f"設定: {result.bar_length_px}px = {spin_value.value()}{unit}"
-                f" → {ppu:.3f} px/µm"
+                _("Set: {px}px = {val}{unit} \u2192 {ppu:.3f} px/\u00b5m").format(
+                    px=result.bar_length_px,
+                    val=spin_value.value(),
+                    unit=unit,
+                    ppu=ppu,
+                )
             )
             self._tab_calc.set_scale_from_detection(ppu, status)
             self._scale_bar_result = result
             self._refresh_original_with_scale_bar()
             self._refresh_processed_with_scale_bar()
             self._viewer.set_marker_roi(None)  # Clear overlay so scale bar line is visible
-            self.statusBar().showMessage(f"スケール設定: {ppu:.3f} px/µm", 5000)
+            self.statusBar().showMessage(
+                _("Scale set: {ppu:.3f} px/\u00b5m").format(ppu=ppu), 5000
+            )
         else:
-            self._tab_calc.set_scale_status("キャンセルされました")
+            self._tab_calc.set_scale_status(_("Cancelled"))
 
     # ------------------------------------------------------------------
     # Export / save actions
@@ -1447,65 +1507,65 @@ class SettingsDialog(QMainWindow):
         default_name = f"{self._image_stem}_overlay.png" if self._image_stem else "grain_overlay.png"
         initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "画像を保存", initial,
-            "PNG ファイル (*.png);;JPEG ファイル (*.jpg);;すべてのファイル (*)",
+            self, _("Save Image"), initial,
+            _("PNG files (*.png);;JPEG files (*.jpg);;All files (*)"),
         )
         if not path:
             return
         self._last_dir = str(Path(path).parent)
         try:
             self._analyzer.save_labeled_image(path)
-            self.statusBar().showMessage(f"画像を保存しました: {path}", 5000)
+            self.statusBar().showMessage(_("Image saved: {path}").format(path=path), 5000)
         except Exception as exc:
-            QMessageBox.critical(self, "エラー", str(exc))
+            QMessageBox.critical(self, _("Error"), str(exc))
 
     def _export_chord_csv(self) -> None:
         default_name = f"{self._image_stem}_chord.csv" if self._image_stem else "chord_lengths.csv"
         initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "コード長CSVを保存", initial,
-            "CSV ファイル (*.csv);;すべてのファイル (*)",
+            self, _("Save Chord Length CSV"), initial,
+            _("CSV files (*.csv);;All files (*)"),
         )
         if not path:
             return
         self._last_dir = str(Path(path).parent)
         try:
             self._analyzer.save_chord_csv(path)
-            self.statusBar().showMessage(f"コード長CSVを保存しました: {path}", 5000)
+            self.statusBar().showMessage(_("Chord length CSV saved: {path}").format(path=path), 5000)
         except Exception as exc:
-            QMessageBox.critical(self, "エラー", str(exc))
+            QMessageBox.critical(self, _("Error"), str(exc))
 
     def _export_grain_csv(self) -> None:
         default_name = f"{self._image_stem}_grain.csv" if self._image_stem else "grain_areas.csv"
         initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "粒子面積CSVを保存", initial,
-            "CSV ファイル (*.csv);;すべてのファイル (*)",
+            self, _("Save Grain Area CSV"), initial,
+            _("CSV files (*.csv);;All files (*)"),
         )
         if not path:
             return
         self._last_dir = str(Path(path).parent)
         try:
             self._analyzer.save_grain_csv(path)
-            self.statusBar().showMessage(f"粒子面積CSVを保存しました: {path}", 5000)
+            self.statusBar().showMessage(_("Grain area CSV saved: {path}").format(path=path), 5000)
         except Exception as exc:
-            QMessageBox.critical(self, "エラー", str(exc))
+            QMessageBox.critical(self, _("Error"), str(exc))
 
     def _export_result_csv(self) -> None:
         default_name = f"{self._image_stem}_result.csv" if self._image_stem else "result.csv"
         initial = str(Path(self._last_dir) / default_name) if self._last_dir else default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "結果サマリーCSVを保存", initial,
-            "CSV ファイル (*.csv);;すべてのファイル (*)",
+            self, _("Save Result Summary CSV"), initial,
+            _("CSV files (*.csv);;All files (*)"),
         )
         if not path:
             return
         self._last_dir = str(Path(path).parent)
         try:
             self._analyzer.save_result_csv(path)
-            self.statusBar().showMessage(f"結果サマリーCSVを保存しました: {path}", 5000)
+            self.statusBar().showMessage(_("Result summary CSV saved: {path}").format(path=path), 5000)
         except Exception as exc:
-            QMessageBox.critical(self, "エラー", str(exc))
+            QMessageBox.critical(self, _("Error"), str(exc))
 
     # ------------------------------------------------------------------
     # ROI sync: viewer → spinboxes

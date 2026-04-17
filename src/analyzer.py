@@ -14,6 +14,7 @@ from scipy import ndimage
 
 from gsat import ski_driver_functions as sdrv
 from gsat import grain_size_functions as gsz
+from i18n import _
 
 
 @dataclass
@@ -126,7 +127,7 @@ class GrainAnalyzer:
         img = self.gray_image.copy()
 
         # 0. Optionally invert (for optical images where boundaries are dark)
-        _prog("(1/7) 輝度調整中...", 0)
+        _prog(_("(1/7) Adjusting brightness..."), 0)
         if p.invert_grayscale:
             img = 255 - img
 
@@ -140,21 +141,21 @@ class GrainAnalyzer:
         _check()
 
         # 1. Denoise
-        _prog("(2/7) ノイズ除去中...", 1)
+        _prog(_("(2/7) Denoising..."), 1)
         img = sdrv.apply_driver_denoise(
             img, ["nl_means", p.denoise_h, p.denoise_patch, p.denoise_search], quiet_in=True
         )
         _check()
 
         # 2. Sharpen
-        _prog("(3/7) シャープ化中...", 2)
+        _prog(_("(3/7) Sharpening..."), 2)
         img = sdrv.apply_driver_sharpen(
             img, ["unsharp_mask", p.sharpen_radius, p.sharpen_amount], quiet_in=True
         )
         _check()
 
         # 3. Threshold → binary
-        _prog("(4/7) 二値化中...", 3)
+        _prog(_("(4/7) Thresholding..."), 3)
         if p.threshold_method == "global_threshold":
             img = sdrv.apply_driver_thresholding(
                 img, ["global_threshold", p.threshold_value], quiet_in=True
@@ -170,7 +171,7 @@ class GrainAnalyzer:
         _check()
 
         # 4. Morphological closing (fill gaps in boundaries); skipped when radius=0
-        _prog("(5/7) モルフォロジー処理中...", 4)
+        _prog(_("(5/7) Morphological processing..."), 4)
         if p.morph_close_radius > 0:
             img = sdrv.apply_driver_morph(img, [0, 1, p.morph_close_radius], quiet_in=True)
 
@@ -180,21 +181,21 @@ class GrainAnalyzer:
         _check()
 
         # 6. Remove small features / fill small holes
-        _prog("(6/7) 特徴除去中...", 5)
+        _prog(_("(6/7) Removing small features..."), 5)
         img = sdrv.apply_driver_del_features(
             img, ["scikit", p.max_hole_size, p.min_feature_size], quiet_in=True
         )
         _check()
 
         # 7. Optional skeletonization (e.g. for SEM polished samples)
-        _prog("(7/7) 骨格化中...", 6)
+        _prog(_("(7/7) Skeletonizing..."), 6)
         if p.skeletonize:
             from skimage.morphology import skeletonize as ski_skeletonize
             from skimage.util import img_as_bool, img_as_ubyte as _ubyte
             img = _ubyte(ski_skeletonize(img_as_bool(img)))
         _check()
 
-        _prog("完了", 7)
+        _prog(_("Done"), 7)
         self.binary_image = img
 
     def segment_by_color(self, progress_cb=None, cancel_check=None) -> None:
@@ -219,12 +220,12 @@ class GrainAnalyzer:
                 progress_cb(label, 0, 0)
 
         p = self.params
-        _prog("(1/3) BGR→RGB変換中...", 0)
+        _prog(_("(1/3) BGR\u2192RGB conversion..."), 0)
         rgb = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2RGB)
 
         # felzenszwalb() is a black-box call with no internal progress hook,
         # so switch to indeterminate mode so the bar keeps animating.
-        _prog_indeterminate("(2/3) Felzenszwalb セグメンテーション中...")
+        _prog_indeterminate(_("(2/3) Felzenszwalb segmentation..."))
         segments = felzenszwalb(
             rgb,
             scale=p.color_scale,
@@ -232,7 +233,7 @@ class GrainAnalyzer:
             min_size=p.color_min_size,
         )
 
-        _prog("(3/3) 粒界検出中...", 1)
+        _prog(_("(3/3) Detecting grain boundaries..."), 1)
         # 1-indexed label map compatible with regionprops
         self.labeled_grains = (segments + 1).astype(np.int32)
 
@@ -241,13 +242,13 @@ class GrainAnalyzer:
         self.binary_image = (boundary.astype(np.uint8) * 255)
 
         if p.color_morph_close_radius > 0:
-            _prog_indeterminate("(3/3) モルフォロジー クロージング中...")
+            _prog_indeterminate(_("(3/3) Morphological closing..."))
             self.binary_image = sdrv.apply_driver_morph(
                 self.binary_image, [0, 1, p.color_morph_close_radius], quiet_in=True
             )
             self.labeled_grains = None  # force watershed re-run in measure_grain_areas()
 
-        _prog("完了", 3)
+        _prog(_("Done"), 3)
 
     def run_segmentation(self, params: AnalysisParams, progress_cb=None, cancel_check=None) -> np.ndarray:
         """Step 1: segment the image (threshold or color mode). Returns binary_image."""
@@ -294,7 +295,7 @@ class GrainAnalyzer:
             if cancel_check and cancel_check():
                 raise GrainAnalyzer.Cancelled()
             if progress_cb:
-                progress_cb(f"コード計測中... (θ={theta:.1f}°)", theta_idx, total_thetas)
+                progress_cb(_("Measuring chords... (\u03b8={angle:.1f}\u00b0)").format(angle=theta), theta_idx, total_thetas)
             # Rotate image so we can scan horizontal lines
             if abs(theta) < 0.1:
                 rotated = work_img
@@ -372,13 +373,13 @@ class GrainAnalyzer:
             if p.skip_watershed:
                 # Fast mode: label connected components directly (no distance transform / watershed).
                 # Faster but may over-split touching grains with open boundaries.
-                _prog("(1/4) 高速ラベリング中...", 0)
+                _prog(_("(1/4) Fast labeling..."), 0)
                 self.labeled_grains = measure.label(binary_grains)
-                _prog("(2/4) 高速ラベリング完了", 1)
-                _prog("(3/4) 高速ラベリング完了", 2)
+                _prog(_("(2/4) Fast labeling complete"), 1)
+                _prog(_("(3/4) Fast labeling complete"), 2)
                 _check()
             else:
-                _prog("(1/4) 距離変換中...", 0)
+                _prog(_("(1/4) Distance transform..."), 0)
                 distance = ndimage.distance_transform_edt(binary_grains)
                 _check()
 
@@ -386,7 +387,7 @@ class GrainAnalyzer:
                 # ever split by watershed regardless of grain size or shape.
                 # Use ndimage.maximum_position with label index for O(N) single pass
                 # instead of the O(N×G) per-component mask loop.
-                _prog("(2/4) 領域ラベリング中...", 1)
+                _prog(_("(2/4) Region labeling..."), 1)
                 labeled_components = measure.label(binary_grains)
                 markers_labeled = np.zeros_like(labeled_components)
                 n_components = int(labeled_components.max())
@@ -399,11 +400,11 @@ class GrainAnalyzer:
                             markers_labeled[peak] = cid
                 _check()
 
-                _prog("(3/4) ウォーターシェッド中...", 2)
+                _prog(_("(3/4) Watershed..."), 2)
                 self.labeled_grains = segmentation.watershed(-distance, markers_labeled, mask=binary_grains)
                 _check()
 
-        _prog("(4/4) 粒子特性計算中...", 3)
+        _prog(_("(4/4) Computing grain properties..."), 3)
         height, width = self.labeled_grains.shape
 
         # regionprops_table() is vectorized C code — much faster than iterating regionprops()

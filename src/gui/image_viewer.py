@@ -6,6 +6,8 @@ from PyQt6.QtCore import Qt, QPoint, QRect, QSize, pyqtSignal
 from PyQt6.QtGui import QColor, QCursor, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QApplication, QLabel, QRubberBand, QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 
+from i18n import _
+
 
 def _make_zoom_cursor() -> QCursor:
     """Build a simple magnifying-glass cursor (32×32, transparent background)."""
@@ -219,8 +221,8 @@ class _ImageLabel(QLabel):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        self._draw_roi(painter, self._grain_roi, QColor(255, 200, 0, 80), QColor(255, 200, 0), "粒子領域")
-        self._draw_roi(painter, self._marker_roi, QColor(0, 200, 255, 80), QColor(0, 200, 255), "マーカー")
+        self._draw_roi(painter, self._grain_roi, QColor(255, 200, 0, 80), QColor(255, 200, 0), _("Grain ROI"))
+        self._draw_roi(painter, self._marker_roi, QColor(0, 200, 255, 80), QColor(0, 200, 255), _("Marker"))
 
         painter.end()
 
